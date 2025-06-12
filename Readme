@@ -1,1 +1,28 @@
 
+                                  Project: Time-Series Cell Motility Analysis for Cancer Characterization
+
+This project explores tumor cell motility to identify aggressive subpopulations in breast and ovarian cancer. Using time-lapse fluorescence microscopy, we track cells under different treatments (e.g., HGF/SF activation or inhibition) and extract detailed kinetic and morphological features.
+
+We built a computational pipeline combining image analysis, deep learning, and clustering to map and interpret cellular behaviors.
+
+                                                     Pipeline Overview
+Segmentation & Tracking:
+Performed using Cell-ACDC on live-cell NIR fluorescence images.
+
+Feature Extraction:
+
+Morphokinetic features via PyBatch scripts
+
+Protein expression levels across channels
+
+Time-Series Embedding:
+Motility time-series are processed using TASC (a Time-Series Autoencoder for Single Cells), enabling representation learning of dynamic cell behavior.
+
+Clustering:
+
+We apply DBSCAN and K-Means on the TSFM embeddings
+
+Clusters reveal subpopulations with distinct motion profiles and aggressiveness levels
+
+Validation:
+Our results are compared with the Imaris commercial analysis platform to validate accuracy and biological relevance.
