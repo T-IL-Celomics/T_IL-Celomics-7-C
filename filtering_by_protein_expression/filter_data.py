@@ -3,10 +3,10 @@ import os
 import sys
 
 # Get command-line arguments
-output_dir = "C:\\Users\\97252\\OneDrive\\Desktop\\final project\\Co-lac_python_code\\Output_xls\\C\\test"#sys.argv[1]      # Output directory containing the combined Excel file
-suffix = "C2"#sys.argv[2]          # Suffix for file identification (e.g., F2)
-filter_type = "PN" #sys.argv[3]     # Filter type
-num_channels = 2 #int(sys.argv[4])  # Number of channels (2 or 3)
+output_dir = sys.argv[1]      # Output directory containing the combined Excel file
+suffix = sys.argv[2]          # Suffix for file identification (e.g., F2)
+filter_type = sys.argv[3]     # Filter type
+num_channels = int(sys.argv[4])  # Number of channels (2 or 3)
 
 
 # Construct input file path
