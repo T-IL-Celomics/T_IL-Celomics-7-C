@@ -93,7 +93,7 @@ with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
                 safe_sheet_name = sheet_name[:MAX_SHEETNAME_LEN]
                 df.to_excel(writer, sheet_name=safe_sheet_name, index=False)
                 continue
-            filtered_df = df[df['ID'].isin(parent_IDS)]
+            filtered_df = df #if you want to filter parent(track) data also change to filtered_df = df[df['ID'].isin(parent_IDS)]
             safe_sheet_name = sheet_name[:MAX_SHEETNAME_LEN]
             filtered_df.to_excel(writer, sheet_name=safe_sheet_name, index=False)
 
