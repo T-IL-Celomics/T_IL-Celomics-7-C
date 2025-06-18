@@ -1,5 +1,5 @@
 
-                                  Project: Time-Series Cell Motility Analysis for Cancer Characterization
+                        Project: Time-Series Cell Motility Analysis for Cancer Characterization
 
 This project explores tumor cell motility to identify aggressive subpopulations in breast and ovarian cancer. Using time-lapse fluorescence microscopy, we track cells under different treatments (e.g., HGF/SF activation or inhibition) and extract detailed kinetic and morphological features.
 
