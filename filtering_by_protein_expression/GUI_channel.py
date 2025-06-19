@@ -58,7 +58,11 @@ def run_pipeline():
         combined_filename = f"Gab_Normalized_Combined_{suffix}.xlsx"
         combined_path = os.path.join(output_dir, combined_filename)
 
-        categorized_file = os.path.join(output_dir, f"Segmented_Intensity_Cha1_Cha2_{suffix}.xlsx")
+        channel_part = "_".join([f"Cha{i}" for i in range(1, num_channels + 1)])
+        categorized_file = os.path.join(
+                output_dir,
+                f"Segmented_Intensity_{channel_part}_{suffix}.xlsx"
+        )
 
         if not os.path.exists(combined_path):
             subprocess.run(["python", os.path.join(script_dir, "Categorized_step2.py"), input_file, categorized_file, output_dir, suffix 
