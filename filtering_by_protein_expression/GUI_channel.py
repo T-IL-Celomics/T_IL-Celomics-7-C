@@ -41,28 +41,33 @@ def run_pipeline():
     try:
         os.makedirs(output_dir, exist_ok=True)
 
-        # שליפת הסיומת מהקובץ (למשל F2)
+        # Step 1: code_imaris_step1.py - Categorize and save intensity data
+        # Extract suffix from input file name
         filename = os.path.basename(input_file)
         suffix_parts = filename.split('_')
         suffix = suffix_parts[-2] if len(suffix_parts) >= 2 else ""
 
         # Define path to script folder
-        script_dir = "C:\\Users\\97252\\OneDrive\\Desktop\\final project\\Co-lac_python_code\\optimized_code"
-
-        # Step 1: code_imaris_step1.py (ריצה תמידית, קובץ זמני ביניים)
-        subprocess.run(["python", os.path.join(script_dir, "code_imaris_step1.py"), input_file, output_dir, suffix,
-                         str(num_channels)], check=True)
-
-
-        # Step 2: Categorized_step2.py — נריץ רק אם לא קיים קובץ מאוחד
-        combined_filename = f"Gab_Normalized_Combined_{suffix}.xlsx"
-        combined_path = os.path.join(output_dir, combined_filename)
+        script_dir = "C:\\Users\\97252\\OneDrive\\Desktop\\final project\\T_IL-Celomics-7-C\\filtering_by_protein_expression"
 
         channel_part = "_".join([f"Cha{i}" for i in range(1, num_channels + 1)])
         categorized_file = os.path.join(
                 output_dir,
                 f"Segmented_Intensity_{channel_part}_{suffix}.xlsx"
         )
+        # Check if the categorized file already exists
+        if os.path.exists(os.path.join(output_dir,categorized_file)):
+            print(f"Categorized file already exists: {categorized_file}")
+        else:
+            subprocess.run(["python", os.path.join(script_dir, "code_imaris_step1.py"), input_file, output_dir, suffix,
+                        str(num_channels)], check=True)
+
+
+        # Step 2: Categorized_step2.py - Combine categorized data
+        # Check if the combined file already exists
+        combined_filename = f"Gab_Normalized_Combined_{suffix}.xlsx"
+        combined_path = os.path.join(output_dir, combined_filename)
+
 
         if not os.path.exists(combined_path):
             subprocess.run(["python", os.path.join(script_dir, "Categorized_step2.py"), input_file, categorized_file, output_dir, suffix 
