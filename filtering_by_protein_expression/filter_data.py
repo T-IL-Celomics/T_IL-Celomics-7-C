@@ -14,6 +14,15 @@ file_path = os.path.join(output_dir, f"Gab_Normalized_Combined_{suffix}.xlsx")
 output_path = ""
 filter_func = None
 # Set filtering logic and output file name based on filter_type and number of channels
+if num_channels == 1:
+    if filter_type == "P":
+        # Only 'Pos' or 'High'
+        output_path = os.path.join(output_dir, f"Gab_Normalized_Combined_P_{suffix}.xlsx")
+        filter_func = lambda df: df['Cha1_Category'].isin(['Pos', 'High'])
+    elif filter_type == "N":
+        # Only 'Neg'
+        output_path = os.path.join(output_dir, f"Gab_Normalized_Combined_N_{suffix}.xlsx")
+        filter_func = lambda df: df['Cha1_Category'] == 'Neg'
 if num_channels == 2:
     if filter_type == "PP":
         # Both channels must be 'Pos' or 'High'
@@ -57,7 +66,7 @@ elif num_channels == 3:
 # Load the combined Excel file
 xls = pd.ExcelFile(file_path)
 MAX_SHEETNAME_LEN = 31  # Excel sheet name limit
-required_cols = ['Cha1_Norm', 'Cha2_Norm'] if num_channels == 2 else ['Cha1_Norm', 'Cha2_Norm', 'Cha3_Norm']
+required_cols = ['Cha1_Norm'] if num_channels == 1 else (['Cha1_Norm', 'Cha2_Norm'] if num_channels == 2 else ['Cha1_Norm', 'Cha2_Norm', 'Cha3_Norm'])
 parent_IDS = []
 
 # Process each sheet and apply the filter

@@ -14,6 +14,7 @@ def browse_folder(var):
         var.set(path)
 
 FILTER_OPTIONS = {
+    1: ["Pos", "Neg"],
     2: ["all Pos", "Pos/Neg"],
     3: ["all Pos", "Pos/Pos/Neg" , "Pos/Neg/Pos"]
 }
@@ -71,7 +72,12 @@ def run_pipeline():
             # Run the filter_data script with the appropriate arguments
             # Determine the filter argument based on the number of channels and selected filter option
             filter_arg = ""
-            if num_channels == 2:
+            if num_channels == 1:
+                if filter_option == "Pos":
+                    filter_arg = "P"
+                elif filter_option == "Neg":
+                    filter_arg = "N"
+            elif num_channels == 2:
                 if filter_option == "Pos/Neg":
                     filter_arg = "PN"
                 elif filter_option == "all Pos":
@@ -136,7 +142,7 @@ tk.Label(root, text=warning_text, fg="red", justify="left", wraplength=400).grid
 
 # Number of channels
 tk.Label(root, text="Number of Channels:").grid(row=3, column=0, sticky='e')
-tk.OptionMenu(root, num_channels_var, 2, 3).grid(row=3, column=1, sticky='w')
+tk.OptionMenu(root, num_channels_var, 1, 2, 3).grid(row=3, column=1, sticky='w')
 
 
 
