@@ -15,13 +15,13 @@ Your input folder should be organized as follows:
 
 ```
 
-PhaseX\_DATA/
+PhaseX_DATA/
 ├── ORANGE/
-│   └── B2/
-│       └── B2\_1/
-│           └── \[images with date/time in filenames]
+│ └── B2/
+│ └── B2_1/
+│ └── [images with date/time in filenames]
 ├── GREEN/
-│   └── ...
+│ └── ...
 └── NIR/
 └── ...
 
@@ -51,15 +51,15 @@ After running the script, the output folder will look like this:
 
 ```
 
-ACDC\_IN\_PhaseX/
+ACDC_IN_PhaseX/
 ├── field1/
-│   └── Images/
-│       ├── field1\_B2\_ORANGE\_0.tif
-│       ├── field1\_B2\_ORANGE\_1.tif
-│       └── ...
+│ └── Images/
+│ ├── field1_B2_ORANGE_0.tif
+│ ├── field1_B2_ORANGE_1.tif
+│ └── ...
 └── field2/
 └── Images/
-├── field2\_B2\_GREEN\_0.tif
+├── field2_B2_GREEN_0.tif
 └── ...
 
 ````
