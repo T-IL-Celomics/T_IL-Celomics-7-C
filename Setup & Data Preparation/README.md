@@ -20,12 +20,19 @@ PhaseX_DATA/
 ├── ORANGE/
 
 │ └── B2/
+
 │ └── B2_1/
+
 │ └── [images with date/time in filenames]
+
 ├── GREEN/
+
 │ └── ...
+
 └── NIR/
+
 └── ...
+
 
 ```
 
@@ -54,14 +61,23 @@ After running the script, the output folder will look like this:
 ```
 
 ACDC_IN_PhaseX/
+
 ├── field1/
+
 │ └── Images/
+
 │ ├── field1_B2_ORANGE_0.tif
+
 │ ├── field1_B2_ORANGE_1.tif
+
 │ └── ...
+
 └── field2/
+
 └── Images/
+
 ├── field2_B2_GREEN_0.tif
+
 └── ...
 
 ````
