@@ -16,7 +16,9 @@ Your input folder should be organized as follows:
 ```
 
 PhaseX_DATA/
+
 ├── ORANGE/
+
 │ └── B2/
 │ └── B2_1/
 │ └── [images with date/time in filenames]
