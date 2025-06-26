@@ -1,0 +1,82 @@
+         5058 function calls in 0.002 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       14    0.001    0.000    0.001    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:148(__init__)
+       14    0.000    0.000    0.002    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:308(_enqueue)
+     3192    0.000    0.000    0.000    0.000 {built-in method builtins.callable}
+       28    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report_queue.py:63(enqueue)
+        1    0.000    0.000    0.000    0.000 {built-in method nt.stat}
+      490    0.000    0.000    0.000    0.000 {method 'items' of 'mappingproxy' objects}
+       86    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report_thread.py:198(get_report_ctx)
+        9    0.000    0.000    0.001    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\markdown.py:24(markdown)
+       14    0.000    0.000    0.000    0.000 {method 'CopyFrom' of 'google.protobuf.pyext._message.CMessage' objects}
+      100    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\threading.py:1225(current_thread)
+        1    0.000    0.000    0.002    0.002 \\metlab25\d\pybatch\pybatch.py:1126(run_page)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:136(get_locked_cursor)
+      102    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+       12    0.000    0.000    0.000    0.000 {method 'findall' of 're.Pattern' objects}
+       56    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:279(_cursor)
+       56    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:29(get_container_cursor)
+       12    0.000    0.000    0.000    0.000 {method 'sub' of 're.Pattern' objects}
+        9    0.000    0.000    0.001    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\write.py:37(write)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report_session.py:148(enqueue)
+        9    0.000    0.000    0.001    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\write.py:163(flush_buffer)
+       28    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\config.py:73(get_option)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:213(_active_dg)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report_thread.py:71(enqueue)
+       12    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\textwrap.py:414(dedent)
+       12    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\utils.py:32(clean_text)
+       56    0.000    0.000    0.000    0.000 {method 'HasField' of 'google.protobuf.pyext._message.CMessage' objects}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\script_request_queue.py:122(dequeue)
+        2    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\markdown.py:81(header)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:76(delta_path)
+       32    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\alert.py:95(dg)
+        2    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\utils.py:68(_get_widget_id)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\script_runner.py:179(maybe_handle_execution_control_request)
+      100    0.000    0.000    0.000    0.000 {built-in method _thread.get_ident}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:20(make_delta_path)
+       28    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\config_option.py:210(value)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report.py:100(enqueue)
+        1    0.000    0.000    0.000    0.000 \\metlab25\d\pybatch\pybatch.py:821(get_file_path)
+       71    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:608(_enqueue_message)
+        1    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\text_widgets.py:25(text_input)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\caching.py:154(maybe_show_cached_st_function_warning)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:150(__init__)
+        1    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\button.py:23(button)
+       51    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+        1    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\alert.py:77(success)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\script_runner.py:175(_is_in_script_thread)
+        2    0.000    0.000    0.000    0.000 {method 'SerializeToString' of 'google.protobuf.pyext._message.CMessage' objects}
+        2    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\elements\utils.py:85(register_widget)
+        2    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\report_thread.py:98(add)
+       28    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\config.py:972(parse_config_file)
+        1    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\genericpath.py:16(exists)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:589(_value_or_dg)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:231(_main_dg)
+        2    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\widgets.py:62(get_widget_value)
+       32    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\typing.py:893(cast)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:181(root_container)
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:124(parent_path)
+       11    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\__init__.py:493(_maybe_print_use_warning)
+       28    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\config_option.py:228(<lambda>)
+       14    0.000    0.000    0.000    0.000 {method 'extend' of 'list' objects}
+       10    0.000    0.000    0.000    0.000 {method 'join' of 'str' objects}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:120(root_container)
+        2    0.000    0.000    0.000    0.000 {method 'WhichOneof' of 'google.protobuf.pyext._message.CMessage' objects}
+       12    0.000    0.000    0.000    0.000 {method 'strip' of 'str' objects}
+        9    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\delta_generator.py:290(_is_top_level)
+        9    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+       14    0.000    0.000    0.000    0.000 c:\users\user\anaconda3\envs\tasc\lib\site-packages\streamlit\cursor.py:128(index)
+        2    0.000    0.000    0.000    0.000 {method 'split' of 'str' objects}
+        1    0.000    0.000    0.000    0.000 \\metlab25\d\pybatch\pybatch.py:1183(<listcomp>)
+        2    0.000    0.000    0.000    0.000 {method 'index' of 'list' objects}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.hash}
+        1    0.000    0.000    0.000    0.000 {method 'replace' of 'str' objects}
+        2    0.000    0.000    0.000    0.000 {method 'add' of 'set' objects}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+

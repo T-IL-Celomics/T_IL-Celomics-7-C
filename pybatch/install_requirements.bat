@@ -1,0 +1,1 @@
+cmd /c "activate TASC & pip install -r \\metlab25\d\pybatch\requirements.txt"

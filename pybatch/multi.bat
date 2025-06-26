@@ -1,0 +1,1 @@
+start "OPENING PYMULTI..." cmd /c "activate TASC & echo PyMulti app should open shortly... & echo DO NOT close this window & streamlit run \\metlab25\d\pybatch\multi.py"

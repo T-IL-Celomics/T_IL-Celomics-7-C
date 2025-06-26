@@ -1,0 +1,1 @@
+start "OPENING PYBATCH... Don't close this window!" cmd /c "activate TASC & echo PyBatch app should open shortly... & echo DO NOT close this window & streamlit run \\metlab24\d\jeries\pybatch\pybatch.py"
