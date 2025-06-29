@@ -94,14 +94,19 @@ PARAM_GRAPHS= {"Instantaneous_Speed": ["y_pos_time", "average", "layers", "layer
                "Instantaneous_Angle": ["average"],
                "IntensityCenterCh1": ["y_pos_time", "average"],
                "IntensityCenterCh2": ["y_pos_time", "average"],
+               "IntensityCenterCh3": ["y_pos_time", "average"],
                "IntensityMaxCh1": ["y_pos_time", "average"],
                "IntensityMaxCh2": ["y_pos_time", "average"],
+               "IntensityMaxCh3": ["y_pos_time", "average"],
                "IntensityMeanCh1": ["y_pos_time", "average"],
                "IntensityMeanCh2": ["y_pos_time", "average"],
+               "IntensityMeanCh3": ["y_pos_time", "average"],
                "IntensityMedianCh1": ["y_pos_time", "average"],
                "IntensityMedianCh2": ["y_pos_time", "average"],
+               "IntensityMedianCh3": ["y_pos_time", "average"],
                "IntensitySumCh1": ["y_pos_time", "average"],
                "IntensitySumCh2": ["y_pos_time", "average"],
+               "IntensitySumCh3": ["y_pos_time", "average"],
                "Min_Distance": ["y_pos_time", "layers", "layers_scaled"]}
 
 PARAM_PAIR_GRAPHS = {("Velocity_X", "Velocity_Y"): ["average", "absolute"],
@@ -119,10 +124,22 @@ PARAM_PAIR_GRAPHS = {("Velocity_X", "Velocity_Y"): ["average", "absolute"],
                      ("Instantaneous_Speed", "Min_Distance"): ["average"],
                      ("Acceleration", "Min_Distance"): ["average"],
                      ("IntensityCenterCh1", "IntensityCenterCh2"): ["average"],
+                     ("IntensityCenterCh1", "IntensityCenterCh3"): ["average"],
+                     ("IntensityCenterCh2", "IntensityCenterCh3"): ["average"],
                      ("IntensityMaxCh1", "IntensityMaxCh2"): ["average"],
+                     ("IntensityMaxCh1", "IntensityMaxCh3"): ["average"],
+                     ("IntensityMaxCh2", "IntensityMaxCh3"): ["average"],
                      ("IntensityMeanCh1", "IntensityMeanCh2"): ["average"],
+                     ("IntensityMeanCh1", "IntensityMeanCh3"): ["average"],
+                     ("IntensityMeanCh2", "IntensityMeanCh3"): ["average"],
                      ("IntensityMedianCh1", "IntensityMedianCh2"): ["average"],
-                     ("IntensitySumCh1", "IntensitySumCh2"): ["average"]}
+                     ("IntensityMedianCh1", "IntensityMedianCh3"): ["average"],
+                     ("IntensityMedianCh2", "IntensityMedianCh3"): ["average"],
+                     ("IntensitySumCh1", "IntensitySumCh2"): ["average"],
+                     ("IntensitySumCh1", "IntensitySumCh3"): ["average"],
+                     ("IntensitySumCh2", "IntensitySumCh3"): ["average"]}
+
+
 
 WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Ending_Value",
                    "Velocity_Ending_Time", "Velocity_Starting_Value", "Velocity_Starting_Time"]
@@ -146,8 +163,8 @@ UNIT_DICT = {"Instantaneous_Speed": r" [$\mu$m/h]", "Velocity_X": r" [$\mu$m/h]"
              "Track_Displacement_Y": r" [$\mu$m]", "Track_Displacement_Z": r" [$\mu$m]", "Linearity_of_Forward_Progression": "", "Confinement_Ratio": "",
              "Mean_Curvilinear_Speed": r" [$\mu$m/h]", "Mean_Straight_Line_Speed": r" [$\mu$m/h]", "MSD_Linearity_R2_Score": "", "MSD_Brownian_Motion_BIC_Score": "",
              "MSD_Brownian_D": "", "MSD_Directed_Motion_BIC_Score": "", "MSD_Directed_D": "", "MSD_Directed_v2": "", "Min_Distance": r" [$\mu$m]",
-             "Displacement_From_Last_Id": r" [$\mu$m]", "IntensityCenterCh1": "", "IntensityCenterCh2": "", "IntensityMaxCh1": "", "IntensityMaxCh2": "", "IntensityMeanCh1": "",
-             "IntensityMeanCh2": "", "IntensityMedianCh1": "", "IntensityMedianCh2": "", "IntensitySumCh1": "", "IntensitySumCh2": ""}
+             "Displacement_From_Last_Id": r" [$\mu$m]", "IntensityCenterCh1": "", "IntensityCenterCh2": "","IntensityCenterCh3": "", "IntensityMaxCh1": "", "IntensityMaxCh2": "","IntensityMaxCh3": "", "IntensityMeanCh1": "",
+             "IntensityMeanCh2": "","IntensityMeanCh3": "", "IntensityMedianCh1": "", "IntensityMedianCh2": "","IntensityMedianCh3": "", "IntensitySumCh1": "", "IntensitySumCh2": "","IntensitySumCh3": ""}
 
 MARKERS = ["o", "^", "s", "P", "D", "X", "v", "<", ">", "p", ".", "1", "3", "4"] + ["$%s$" % chr(97+i) for i in range(26)]
 LINE_COLORS = list(colors.TABLEAU_COLORS.keys()) + list(colors.XKCD_COLORS.keys())[:30]
@@ -158,8 +175,8 @@ CLUSTER_ID_FIELDS = ["Area", "Displacement_From_Last_Id", "Instantaneous_Speed",
                      "Acceleration_Y", "Acceleration_Z", "Displacement2", "Directional_Change", "Directional_Change_X", "Directional_Change_Y", "Directional_Change_Z", "Volume",
                      "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B", "Eccentricity_C", "Sphericity", "EllipsoidAxisLengthB",
                      "EllipsoidAxisLengthC", "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X", "Ellip_Ax_C_Y", "Ellip_Ax_C_Z", "Instantaneous_Angle",
-                     "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z", "Min_Distance", "IntensityCenterCh1", "IntensityCenterCh2", "IntensityMaxCh1",
-                     "IntensityMaxCh2", "IntensityMeanCh1", "IntensityMeanCh2", "IntensityMedianCh1", "IntensityMedianCh2", "IntensitySumCh1", "IntensitySumCh2"]
+                     "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z", "Min_Distance", "IntensityCenterCh1", "IntensityCenterCh2","IntensityCenterCh3", "IntensityMaxCh1",
+                     "IntensityMaxCh2","IntensityMaxCh3", "IntensityMeanCh1", "IntensityMeanCh2","IntensityMeanCh3", "IntensityMedianCh1", "IntensityMedianCh2","IntensityMedianCh3", "IntensitySumCh1", "IntensitySumCh2","IntensitySumCh3"]
 CLUSTER_CELL_FIELDS = ["Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X", "Track_Displacement_Y", "Track_Displacement_Z",
                        "Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed", "Confinement_Ratio", "MSD_Directed_v2",
                        "MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score", "MSD_Brownian_D", "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D",
@@ -514,7 +531,6 @@ class Batch_Experiment(object):
         else:
             locations = [well[9:12] for well in self.wells]
         self.wells = [well for well in full_well_names if well[15:18] in locations]
-        print(f"self.wells : {self.wells}")
         self.well_amount = len(self.wells)
         # fixed self.wells to be in the summary_table format
         self.parameters = list(summary_table.keys())
@@ -524,7 +540,6 @@ class Batch_Experiment(object):
             self.dimensions = 2
         for well in self.wells:
             self.well_info[well] = summary_table[summary_table["Experiment"] == well]
-        print(f"self.well_info : {self.well_info}")
         self.shortened_well_names = {well: well[18:-4].replace("NNN0", "") for well in self.wells}
         all_short_names = list(self.shortened_well_names.values())
         first_val = all_short_names[0][:4]
@@ -539,7 +554,6 @@ class Batch_Experiment(object):
         all_files = os.listdir(summary_folder)
         full_well_files = [f for f in all_files if "_full" in f.lower() and "summary_table_" in f.lower() and f[0] != "~"]
         full_well_names = [f.split("_")[-2] for f in full_well_files]
-        print(self.wells)
         if len(self.wells[0]) == 3:
             locations = self.wells
         elif len(self.wells[0]) == 8:
@@ -547,7 +561,6 @@ class Batch_Experiment(object):
         else:
             locations = [well[9:12] for well in self.wells]
         self.wells = [well for well in full_well_names if well[15:18] in locations]
-        print(f"self.wells : {self.wells}")
         self.well_amount = len(self.wells)
         # fixed self.wells to be in the summary_table format
         self.parameters = []
@@ -568,8 +581,6 @@ class Batch_Experiment(object):
                     self.dimensions = 2
             elif parameters != self.parameters:
                 print(f"Warning: Different parameters for well {well}. Using intersection of columns.")
-                print(parameters)
-                print(self.parameters)
                 common_cols = list(set(parameters) & set(self.parameters))
                 well_df = well_df[common_cols]
             self.well_info[well] = well_df
@@ -833,7 +844,6 @@ class Batch_Experiment(object):
 
     def draw_scratch(self, well, output_folder=None):
         fig, graph_ax = plt.subplots()
-        print(f"well_info : {self.well_info} , well : {well}")
         well_df = self.well_info[well]
         well_name = self.shortened_well_names[well]
         graph_ax.set_title("%d%s - " % (self.pdf.page_no(), chr(self.graph_counter)) + well_name)
@@ -861,12 +871,11 @@ class Batch_Experiment(object):
     def make_scratch_pages(self):
         output_folder = os.path.join(self.output_path, "scratches")
         try:
-        	os.mkdir(output_folder)
+            os.mkdir(output_folder)
         except FileExistsError:
-        	pass
+            pass
         self.new_page("Scratches", table=True)
-        print(self.well_amount)
-        print(self.wells)
+
         for i in range(self.well_amount):
             well = self.wells[i]
             if not os.path.exists(os.path.join(output_folder, well + ".jpg")):

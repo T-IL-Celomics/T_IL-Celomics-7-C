@@ -193,14 +193,19 @@ DESIRED_FIELDS = ["Area",
                   "Ellipticity_prolate",
                   "IntensityCenterCh1",
                   "IntensityCenterCh2",
+                  "IntensityCenterCh3",
                   "IntensityMaxCh1",
                   "IntensityMaxCh2",
+                  "IntensityMaxCh3",
                   "IntensityMeanCh1",
                   "IntensityMeanCh2",
+                  "IntensityMeanCh3",
                   "IntensityMedianCh1",
                   "IntensityMedianCh2",
+                  "IntensityMedianCh3",
                   "IntensitySumCh1",
                   "IntensitySumCh2",
+                  "IntensitySumCh3",
                   "Instantaneous_Angle",
                   "Instantaneous_Angle_OLD",
                   "Instantaneous_Angle_X",
@@ -305,15 +310,13 @@ def check_dimensions(imaris_df, dimensions=None):
 def check_dt(imaris_df, dt=None):
     FIRST_PARENT = imaris_df["Acceleration"]["Parent"].iloc[0]
     first_parent_duration = round(imaris_df["TrackDuration"].loc[FIRST_PARENT][0])
-    print(first_parent_duration)
     if imaris_df["TrackDuration"].loc[FIRST_PARENT][1] == "m":
         first_parent_duration *= 60
     elif imaris_df["TrackDuration"].loc[FIRST_PARENT][1] == "h":
         first_parent_duration *= 3600
     first_parent_time_indexes = imaris_df["TimeIndex"][imaris_df["TimeIndex"]["Parent"] == FIRST_PARENT]
-    print(first_parent_time_indexes)
     first_parent_time_indexes = list(first_parent_time_indexes[first_parent_time_indexes.columns[0]])
-    print(first_parent_time_indexes)
+    
     apparent_dt = round(
         (first_parent_duration / (max(first_parent_time_indexes) - min(first_parent_time_indexes))) / 60, 2)
     if dt == None:

@@ -349,7 +349,7 @@ class Id_Info(Cell_Info):
                                              (self.__getattribute__(ELLIP_LEN_SHEET+"A") ** 2 + self.__getattribute__(ELLIP_LEN_SHEET+"B") ** 2) ** 0.5)
 
     def _get_intensity_info(self):
-        for i in range(1, 3):
+        for i in range(1, 4):
             try:
                 for intensity_param in INTENSITY_SHEETS:
                     self._set_value_from_sheet(intensity_param % i, self.ID)

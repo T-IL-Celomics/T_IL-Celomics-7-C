@@ -147,7 +147,7 @@ def pcaPlot(pca, pca_df, hue, title,nColor=0, nShades=0, nColorTreat=0, nShadesT
         palette = sns.color_palette("hls", num_of_dep)  # Choose color
 
     pca_expln_var_r = pca.explained_variance_ratio_*100
-    print(len(palette))
+    
     s = sns.scatterplot(x="PC1", y="PC2", hue=hue.name, data=pca_df, ax=ax, 
                         palette=palette);
 
@@ -598,7 +598,7 @@ def PCA_colorPar1_titlePar2(pca, pca_df, Par1, Par2, figsize, labelsPar1='', lab
         palette = ChoosePalette(nColorLay,nShadesLay)
     else:
         palette = sns.color_palette("hls", num_of_dep)  # Choose color
-    print(len(palette))
+    
     pca_expln_var_r = pca.explained_variance_ratio_*100
     uPar2 = pca_df[Par2].unique()
     uPar2.sort()
