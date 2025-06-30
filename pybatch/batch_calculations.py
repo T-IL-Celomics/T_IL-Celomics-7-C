@@ -139,8 +139,6 @@ PARAM_PAIR_GRAPHS = {("Velocity_X", "Velocity_Y"): ["average", "absolute"],
                      ("IntensitySumCh1", "IntensitySumCh3"): ["average"],
                      ("IntensitySumCh2", "IntensitySumCh3"): ["average"]}
 
-
-
 WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Ending_Value",
                    "Velocity_Ending_Time", "Velocity_Starting_Value", "Velocity_Starting_Time"]
 LEFT_WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Starting_Value", "Velocity_Starting_Time"]
@@ -244,6 +242,9 @@ class Batch_Experiment(object):
             return self.min_max_dict[attribute]
         all_values = []
         for well_df in self.well_info.values():
+            # --- Fix: skip wells missing the parameter ---
+            if parameter not in well_df.columns:
+                continue
             well_df = well_df.dropna(subset=[parameter])
             if average:
                 time_indexes = np.array(well_df.TimeIndex.unique())
@@ -292,6 +293,9 @@ class Batch_Experiment(object):
             return self.layers_min_max_dict[attribute]
         for well in self.wells:
             well_df = self.well_info[well]
+            # --- Fix: skip wells missing the parameter ---
+            if parameter not in well_df.columns:
+                continue
             well_df = well_df.dropna(subset=[parameter])
             middle, jump, distances = self._middle_info(well, axis)
             for time_index in well_df.TimeIndex.unique():
@@ -323,6 +327,9 @@ class Batch_Experiment(object):
         all_values = []
         for well in self.wells:
             well_df = self.well_info[well]
+            # --- Fix: skip wells missing the parameter ---
+            if parameter not in well_df.columns:
+                continue
             well_df = well_df.dropna(subset=[parameter])
             scratch_info_per_time = self._scratch_info(well)
             time_indexes = well_df.TimeIndex.unique()
@@ -531,6 +538,7 @@ class Batch_Experiment(object):
         else:
             locations = [well[9:12] for well in self.wells]
         self.wells = [well for well in full_well_names if well[15:18] in locations]
+
         self.well_amount = len(self.wells)
         # fixed self.wells to be in the summary_table format
         self.parameters = list(summary_table.keys())
@@ -540,6 +548,7 @@ class Batch_Experiment(object):
             self.dimensions = 2
         for well in self.wells:
             self.well_info[well] = summary_table[summary_table["Experiment"] == well]
+
         self.shortened_well_names = {well: well[18:-4].replace("NNN0", "") for well in self.wells}
         all_short_names = list(self.shortened_well_names.values())
         first_val = all_short_names[0][:4]
@@ -554,6 +563,7 @@ class Batch_Experiment(object):
         all_files = os.listdir(summary_folder)
         full_well_files = [f for f in all_files if "_full" in f.lower() and "summary_table_" in f.lower() and f[0] != "~"]
         full_well_names = [f.split("_")[-2] for f in full_well_files]
+
         if len(self.wells[0]) == 3:
             locations = self.wells
         elif len(self.wells[0]) == 8:
@@ -561,6 +571,7 @@ class Batch_Experiment(object):
         else:
             locations = [well[9:12] for well in self.wells]
         self.wells = [well for well in full_well_names if well[15:18] in locations]
+
         self.well_amount = len(self.wells)
         # fixed self.wells to be in the summary_table format
         self.parameters = []
@@ -580,9 +591,12 @@ class Batch_Experiment(object):
                 else:
                     self.dimensions = 2
             elif parameters != self.parameters:
-                print(f"Warning: Different parameters for well {well}. Using intersection of columns.")
-                common_cols = list(set(parameters) & set(self.parameters))
-                well_df = well_df[common_cols]
+                print(f"Warning: might have Different parameters for well {well}. Using intersection of columns. can be due to different number of channels between two wells")
+                cols = list(set(parameters) & set(self.parameters))
+                if(len(self.parameters) < len(parameters)):
+                    self.parameters = parameters
+                    cols = list(set(self.parameters))
+                well_df = well_df[cols]
             self.well_info[well] = well_df
 
 
@@ -918,6 +932,9 @@ class Batch_Experiment(object):
     def draw_y_pos_time_graph(self, well, parameter, log=False, output_folder=None, absolute=False):
         fig, graph_ax = plt.subplots()
         well_df = self.well_info[well]
+        if parameter not in well_df.columns:
+            print(f"draw_y_pos_time_graph : Skipping {parameter} for well {well}: column missing.")
+            return  # Skip this plot
         well_df = well_df.dropna(subset=[parameter])
         well_name = self.shortened_well_names[well]
         min_time, max_time = self._min_max("TimeIndex", max_val=self.dt, multiplier=self.dt, scaled=False)
@@ -951,6 +968,7 @@ class Batch_Experiment(object):
         ticks[-1] = ">" + ticks[-1]
         colorbar.set_ticklabels(ticks)
         graph_ax.set_box_aspect(1)
+
         fig.tight_layout()
         if output_folder:
             fig.savefig(os.path.join(output_folder, well + ".jpg"))
@@ -973,12 +991,17 @@ class Batch_Experiment(object):
         except FileExistsError:
             pass
         self.new_page(title, table=True)
+
         for i in range(self.well_amount):
             well = self.wells[i]
-            if not os.path.exists(os.path.join(output_folder, well + ".jpg")):
+            image_path = os.path.join(output_folder, well + ".jpg")
+            if not os.path.exists(image_path):
                 self.draw_y_pos_time_graph(well, parameter, log=log, output_folder=output_folder, absolute=absolute)
-            self.pdf.image(os.path.join(output_folder, well + ".jpg"),
-                           x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
+            if os.path.exists(image_path):
+                self.pdf.image(os.path.join(output_folder, well + ".jpg"),
+                               x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
+            else:
+                print(f"make_y_pos_time_page : Skipping PDF image for {well} and {parameter}: image not created.")
 
     def draw_average_over_time(self, parameter, output_folder=None, absolute=False):
         fig, graph_ax = plt.subplots()
@@ -997,6 +1020,9 @@ class Batch_Experiment(object):
             color = LINE_COLORS[i]
             well = self.wells[i]
             well_df = self.well_info[well]
+            # --- Fix: skip wells missing the parameter ---
+            if parameter not in well_df.columns:
+                continue
             well_df = well_df.dropna(subset=[parameter])
             well_name = self.shortened_well_names[well]
             x = well_df.TimeIndex.unique()
@@ -1031,33 +1057,45 @@ class Batch_Experiment(object):
             self.graph_counter = 65
         graph_ax.set_xlabel("Treatment")
         graph_ax.set_ylabel("Average " + parameter + UNIT_DICT[parameter])
-        x = range(self.well_amount)
+        x = []  # range(self.well_amount)
         height = []
         yerrors = []
-        for well in self.wells:
+        x_tick_labels = []
+        for idx, well in enumerate(self.wells):
             well_df = self.well_info[well]
+            if parameter not in well_df.columns:
+                continue  # skip wells missing the parameter
             well_df = well_df.dropna(subset=[parameter])
             if per_cell == False:
                 values = np.array(well_df[parameter])
             else:
                 cells = well_df.Parent.unique()
                 if wave == "all":
-                    cells = [cell for cell in cells if well_df[well_df.Parent == cell].iloc[0].Velocity_Full_Width_Half_Maximum != 0]
+                    cells = [cell for cell in cells if
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Full_Width_Half_Maximum != 0]
                 elif wave == "double":
-                    cells = [cell for cell in cells if well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
-                                                       well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
+                    cells = [cell for cell in cells if
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
                 elif wave == "left":
-                    cells = [cell for cell in cells if well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
-                                                       well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value == 0]
+                    cells = [cell for cell in cells if
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value == 0]
                 elif wave == "right":
-                    cells = [cell for cell in cells if well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value == 0 and \
-                                                       well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
+                    cells = [cell for cell in cells if
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Starting_Value == 0 and \
+                             well_df[well_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
                 values = [well_df[well_df.Parent == cell].iloc[0][parameter] for cell in cells]
+            if len(values) == 0:
+                continue  # skip if no values
             if absolute:
                 values = np.absolute(values)
+
+            x.append(len(x))  # index for bar position
             height.append(np.average(values))
             yerrors.append(np.std(values) / (len(values) ** 0.5))
-        x_tick_labels = [self.shortened_well_names[well] for well in self.wells]
+            x_tick_labels.append(self.shortened_well_names[well])
+
         graph_ax.bar(x, height, color=LINE_COLORS[:len(x)], yerr=yerrors)
         graph_ax.set_xticks(x)
         graph_ax.set_xticklabels(x_tick_labels, rotation=45 if self.well_amount < 15 else 90, ha="right")
@@ -1095,6 +1133,10 @@ class Batch_Experiment(object):
                          fixed_distance=30, scaled=False):
         fig, graph_ax = plt.subplots()
         well_df = self.well_info[well]
+        # --- Fix: skip wells missing the parameter ---
+        if parameter not in well_df.columns:
+            print(f"draw layer graph : Skipping {parameter} for well {well}: column missing.")
+            return
         well_df = well_df.dropna(subset=[parameter])
         well_name = self.shortened_well_names[well]
         min_time, max_time = self._min_max("TimeIndex", max_val=self.dt, multiplier=self.dt, scaled=False)
@@ -1241,6 +1283,9 @@ class Batch_Experiment(object):
         # end of setup
         for i in range(len(wells)):
             well_df = self.well_info[wells[i]]
+            if (parameter1 not in well_df.columns) or (parameter2 not in well_df.columns):
+                print(f"param vs param : Skipping {parameter1}vs{parameter2} for well {well}: a column is missing.")
+                continue
             well_df = well_df.dropna(subset=[parameter1, parameter2])
             marker = MARKERS[i]
             if average:
@@ -1289,14 +1334,29 @@ class Batch_Experiment(object):
         self.new_page(title, table=True)
         for i in range(self.well_amount):
             well = self.wells[i]
-            if not os.path.exists(os.path.join(output_folder, well + ".jpg")):
-                self.draw_param_vs_param_graph(well, parameter1, parameter2, output_folder=output_folder, absolute=absolute, average=average)
-            self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
+            image_path = os.path.join(output_folder, well + ".jpg")
+            # --- Only plot if both parameters exist in this well ---
+            well_df = self.well_info[well]
+            if parameter1 not in well_df.columns or parameter2 not in well_df.columns:
+                print(f"Skipping {parameter1} vs {parameter2} for well {well}: column(s) missing.")
+                continue
+            if not os.path.exists(image_path):
+                self.draw_param_vs_param_graph(well, parameter1, parameter2, output_folder=output_folder,
+                                               absolute=absolute, average=average)
+            if os.path.exists(image_path):
+                self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i],
+                               y=self.graph_y_coords[i], w=self.graph_width)
+            else:
+                print(f"Skipping PDF image for {well} and {parameter1} vs {parameter2}: image not created.")
+
         if average:
             self.new_page(title + " overlayed")
-            if not os.path.exists(os.path.join(output_folder, "overlayed.jpg")):
-                self.draw_param_vs_param_graph("overlayed", parameter1, parameter2, output_folder=output_folder, absolute=absolute, average=average)
-            self.pdf.image(os.path.join(output_folder, "overlayed.jpg"), x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
+            overlay_path = os.path.join(output_folder, "overlayed.jpg")
+            if not os.path.exists(overlay_path):
+                self.draw_param_vs_param_graph("overlayed", parameter1, parameter2, output_folder=output_folder,
+                                               absolute=absolute, average=average)
+            if os.path.exists(overlay_path):
+                self.pdf.image(overlay_path, x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
 
     def draw_wave_percentage(self, output_folder=None):
         fig, graph_ax = plt.subplots()
@@ -1513,13 +1573,13 @@ class Batch_Experiment(object):
         for well in self.wells:
             well_df = self.well_info[well]
             for parameter in CLUSTER_ID_FIELDS:
-                if parameter in self.parameters:
+                if parameter in self.parameters and parameter in well_df.columns:
                     parameter_array = well_df[parameter].dropna()
                     avg_df.loc[well, parameter] = np.average(parameter_array)
             cells = well_df.Parent.unique()
             well_df = well_df.set_index("Parent")
             for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
-                if parameter in self.parameters:
+                if parameter in self.parameters and parameter in well_df.columns:
                     values = np.array([0.0] * len(cells))
                     for i in range(len(cells)):
                         try:
@@ -1530,6 +1590,15 @@ class Batch_Experiment(object):
                         values = values[values.nonzero()]
                     values = pd.Index(values).dropna()
                     avg_df.loc[well, parameter] = np.average(values)
+
+        # Drop columns and rows with any non-finite values
+        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
+        avg_df = avg_df.replace([np.inf, -np.inf], np.nan)
+        avg_df = avg_df.dropna(axis=1, how='any')  # Drop columns with any NaN
+        avg_df = avg_df.dropna(axis=0, how='any')  # Drop rows with any NaN
+        if avg_df.shape[0] < 2 or avg_df.shape[1] < 2:
+            print("Not enough data for clustering after dropping NaNs.")
+            return
         scaler = StandardScaler(with_std=True)
         avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns, index=[self.shortened_well_names[w] for w in avg_df.index])
         linkaged_pca = linkage(avg_df, "ward")
