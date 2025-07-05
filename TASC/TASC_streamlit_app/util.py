@@ -31,6 +31,9 @@ from tensorflow.keras.models import model_from_json
 from datetime import datetime
 import streamlit as st
 
+
+labels_handles_dic = {}
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -171,6 +174,7 @@ def pcaPlot( pca, pca_df, hue, title, nColor=0, nShades=0, nColorTreat=0, nShade
         handles, labels = ax.get_legend_handles_labels()
         legend_texts = ax.get_legend().texts
         ax.get_legend().remove()
+
 
         leg_title = ""
         if (len(handles) + 1) == len(labels):
@@ -662,12 +666,22 @@ def PCA_colorPar1_titlePar2(pca, pca_df, Par1, Par2, figsize, labelsPar1='', lab
             legend_title = keys.pop(0)
             values.pop(0)
 
-        fig2.legend(
-            values, keys,
-            title=legend_title,
-            loc='center', fontsize='xx-large',
-            framealpha=1, edgecolor='black'
-        )
+        print(f"in func2 {legend_title} , {labels_handles_dic}")
+        if legend_title in labels_handles_dic:
+            fig2.legend(
+                labels_handles_dic[legend_title][0],
+                labels_handles_dic[legend_title][1],
+                title=legend_title,
+                loc='center', fontsize='xx-large',
+                framealpha=1, edgecolor='black'
+            )
+        else:
+            fig2.legend(
+                values, keys,
+                title=legend_title,
+                loc='center', fontsize='xx-large',
+                framealpha=1, edgecolor='black'
+            )
 
         fig2.subplots_adjust(right=0.5, top=0.9)
         plt.suptitle(title, fontweight='bold', fontsize=25)
@@ -699,6 +713,11 @@ def pcaPlotLabel(pca, pca_df, hue, title, labels, nColorLay=0, nShadesLay=0, xli
         if (len(handles) + 1) == len(labels):
             leg_title = labels[0]
             labels = labels[1:]
+
+        if (leg_title not in labels_handles_dic) and (leg_title != ""):
+            labels_handles_dic[leg_title] = (handles,labels)
+        print(f"func1 , {labels_handles_dic}")
+
         f.legend(
             handles, labels,title=leg_title, bbox_to_anchor=(1.02, 1), loc=2,
             borderaxespad=0., framealpha=1, edgecolor='black'
