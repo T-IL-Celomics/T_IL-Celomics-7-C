@@ -774,7 +774,7 @@ def roundInterval(IntervalIdx, unit, prec=0, mul=1.):
     # return chi_df
     
 
-def chi_square_test_tables(pca_df, labels, expectation='CON', Par='Treatments'):
+def chi_square_test_tables(pca_df, labels,f, expectation='CON', Par='Treatments'):
 
     with st.spinner("Running chi-square tests and generating table..."):
         try:
@@ -814,6 +814,7 @@ def chi_square_test_tables(pca_df, labels, expectation='CON', Par='Treatments'):
             chi_table.at[expectation, 'N'] = pca_df[Par].loc[pca_df[Par] == expectation].size
             chi_table.at['All', 'N'] = chi_table['N'].sum()
             st.dataframe(chi_table)
+            f.write(chi_table.to_html(index=True))
             return None
         except Exception as e:
             print(f'couldnt generate chi squared test table for {e}')
@@ -1081,7 +1082,7 @@ def AE_colorPar1_titlePar2(AE_df, Par1='', Par2='', figsize=(15,10), labelsPar1=
         plt.close(fig)
     return None
 
-def DescriptiveTable(dataSpecGraphGroups, title):
+def DescriptiveTable(dataSpecGraphGroups, title,f):
     with st.spinner("Generating descriptive statistics table..."):
         # Select only numeric columns (but keep 'Groups' for grouping)
         numeric_cols = dataSpecGraphGroups.select_dtypes(include=[np.number]).columns.tolist()
@@ -1108,9 +1109,10 @@ def DescriptiveTable(dataSpecGraphGroups, title):
 
         gb_Groups.to_csv(title + ' Descriptive Table - Groups.csv')
         st.dataframe(gb_Groups)
+        f.write(gb_Groups.to_html(index=True))
     return None
 
-def ANOVE_DESC_TABLE(dataSpecGraphGroups, Features, title, dep='Groups', groupList=[0,1,2]):
+def ANOVE_DESC_TABLE(dataSpecGraphGroups, Features, title,f, dep='Groups', groupList=[0,1,2]):
     with st.spinner("Generating ANOVA + Descriptive Table..."):
         st.latex(r"\color{blue}{\Large ANOVA\ Table\ feature\ per\ Group}")
         ANOVA_MI = pd.MultiIndex.from_product(
@@ -1142,6 +1144,7 @@ def ANOVE_DESC_TABLE(dataSpecGraphGroups, Features, title, dep='Groups', groupLi
             ])
             ANOVA_Desc_df.loc[par, 'Groups'] = gb_Groups.values.ravel()
         st.dataframe(ANOVA_Desc_df)
+        f.write(ANOVA_Desc_df.to_html(index=True))
         ANOVA_Desc_df.to_csv(title + ' ANOVA + Descriptive Table - ' + dep + '.csv')
     return ANOVA_Desc_df
 
@@ -1159,7 +1162,7 @@ def ANOVE_DESC_TABLE(dataSpecGraphGroups, Features, title, dep='Groups', groupLi
         # display(ano)
     # return None
 
-def ANOVA_TABLE(dataSpecGraphGroups, Features, title='', dep='Groups'):
+def ANOVA_TABLE(dataSpecGraphGroups, Features,f, title='', dep='Groups'):
     with st.spinner("Generating ANOVA Table..."):
         st.latex(r"\color{blue}{\Large ANOVA\ Table\ feature\ per\ Group}")
         ANOVA_MI = pd.MultiIndex.from_product(
@@ -1179,6 +1182,7 @@ def ANOVA_TABLE(dataSpecGraphGroups, Features, title='', dep='Groups'):
         ANOVA_df.dropna(axis=1, inplace=True)
         ANOVA_df.to_csv(title + ' ANOVA Table - ' + dep + '.csv')
         st.dataframe(ANOVA_df)
+        f.write(ANOVA_df.to_html(index=True))
     return
 
 def TASC(dataDrop, dataLabel, labelsCol='Experiment', LE=True,

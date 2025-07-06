@@ -5,6 +5,7 @@ import pickle
 import seaborn as sns
 from sklearn.preprocessing import LabelEncoder
 from util import *
+import markdown
 
 st.set_page_config(layout="wide")
 
@@ -14,7 +15,7 @@ def run_analysis(
         MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
         nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
         nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-        CON, CL, wellCON, controls, HC, AE_model, model_name):
+        CON, CL, wellCON, controls, HC, AE_model, model_name,f):
 
     # Load data
     rawdata = pd.read_pickle(path + ST)
@@ -36,7 +37,9 @@ def run_analysis(
         'Experiment').reset_index(name='Number of Cells')
     val_c.index.name = 'Index #'
     st.markdown("### Number of Cells per Experiment")
+    f.write(markdown.markdown("### Number of Cells per Experiment"))
     st.dataframe(val_c)
+    f.write(val_c.to_html(index=True))
 
     # Sorting controls by length to avoid problems later
     controls.sort(key=len, reverse=True)
@@ -311,10 +314,11 @@ def run_analysis(
 
         if not singleTREAT:
             st.markdown("**Treatments p-Value**")
+            f.write(markdown.markdown("**Treatments p-Value**"))
             labels = list(pca_df.groupby('Treatments').describe().index.values)
             Par = 'Treatments'
             for expectation in CON:
-                chi_square_test_tables(pca_df, labels, expectation=expectation, Par=Par)
+                chi_square_test_tables(pca_df, labels,f, expectation=expectation, Par=Par)
 
         st.latex(r"\color{blue}{\Large Figure\ %i}" % (FigureNumber))
         FigureNumber += 1
@@ -328,8 +332,9 @@ def run_analysis(
         if multipleCL:
             for expectation in CL:
                 st.markdown(f"**Cell Line p-Value {expectation}**")
+                f.write(markdown.markdown(f"**Cell Line p-Value {expectation}**"))
                 labels = list(pca_df.groupby(Par).describe().index.values)
-                chi_square_test_tables(pca_df, labels, expectation=expectation, Par=Par)
+                chi_square_test_tables(pca_df, labels,f, expectation=expectation, Par=Par)
 
         st.latex(r"\color{blue}{\Large Figure\ %i}" % (FigureNumber))
         FigureNumber += 1
@@ -347,7 +352,8 @@ def run_analysis(
                 labelsE = list(pca_df_E.get_group(cl).groupby(Par).describe().index.values)
                 expectation = [well for well in wellCON if cl in well][0]
                 st.markdown(f"**Experiments p-Value {expectation}**")
-                chi_square_test_tables(pca_df, labelsE, expectation=expectation, Par=Par)
+                f.write(markdown.markdown(f"**Experiments p-Value {expectation}**"))
+                chi_square_test_tables(pca_df, labelsE,f, expectation=expectation, Par=Par)
 
         st.latex(r"\color{blue}{\Large Figure\ %i}" % (FigureNumber))
         FigureNumber += 1
@@ -365,7 +371,9 @@ def run_analysis(
                                       labels=labels, rotate=0)
         Par = 'TimeLayers'
         expectation = labels[0]
-        chi_square_test_tables(pca_df, labels, expectation=expectation, Par=Par)
+        st.markdown(f"**TimeLayers p-Value {expectation}**")
+        f.write(markdown.markdown(f"**TimeLayers p-Value {expectation}**"))
+        chi_square_test_tables(pca_df, labels,f, expectation=expectation, Par=Par)
 
     controls.sort(key=len, reverse=True)
     COMB = []
@@ -384,7 +392,8 @@ def run_analysis(
             labelsE = list(pca_df_C.get_group(cl).groupby(Par).describe().index.values)
             expectation = [well for well in wellCON if cl in well][0]
             st.markdown(f"**Experiments p-Value {expectation}**")
-            chi_square_test_tables(pca_df_C.get_group(cl), labelsE, expectation=expectation, Par=Par)
+            f.write(markdown.markdown(f"**Experiments p-Value {expectation}**"))
+            chi_square_test_tables(pca_df_C.get_group(cl), labelsE,f, expectation=expectation, Par=Par)
 
     with st.spinner("Generating KDE plots for each treatment..."):
         for treat in uLabelT:
@@ -480,13 +489,17 @@ def run_analysis(
     dataSpecGraphGroups['Groups'] = kmeans_pca['Groups'].copy()
 
     st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+    f.write(markdown.markdown(f"Figure {FigureNumber}"))
     st.markdown("$$\\color{blue}{\\Large Descriptive\\ Table}$$")
+    f.write(markdown.markdown("Descriptive Table"))
     FigureNumber += 1
 
-    DescriptiveTable(dataSpecGraphGroups, path + title)
+    DescriptiveTable(dataSpecGraphGroups, path + title,f)
 
     st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+    f.write(markdown.markdown(f"Figure {FigureNumber}"))
     st.markdown("$$\\color{blue}{\\Large ANOVA\\ -\\ OneWay}$$")
+    f.write(markdown.markdown("ANOVA - OneWay"))
     FigureNumber += 1
 
     with st.spinner('Running ANOVA...'):
@@ -496,7 +509,7 @@ def run_analysis(
             except:
                 st.write(f"Could not convert column: {col}")
 
-        ANOVA_TABLE(dataSpecGraphGroups, Features, path + title, dep='Groups')
+        ANOVA_TABLE(dataSpecGraphGroups, Features,f, path + title, dep='Groups')
 
     dataSpecGraphGroups['CellLine'] = pca_df['CellLine'].copy()
     dataSpecGraphGroupsCL = dataSpecGraphGroups.groupby('CellLine')
@@ -508,7 +521,7 @@ def run_analysis(
         for cl in CL:
             st.markdown(f"$$\\color{{blue}}{{\\Large ANOVA\\ -\\ OneWay\\ {cl}}}$$")
             with st.spinner(f'Running ANOVA for {cl}...'):
-                ANOVA_TABLE(dataSpecGraphGroupsCL.get_group(cl), Features, path + title + ' ' + cl,
+                ANOVA_TABLE(dataSpecGraphGroupsCL.get_group(cl), Features,f, path + title + ' ' + cl,
                                      dep='Groups')
 
     dataSpecGraphGroups = dataSpecGraphN.copy()
@@ -516,11 +529,14 @@ def run_analysis(
 
     if multipleCL:
         st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+        f.write(markdown.markdown(f"Figure {FigureNumber}"))
         st.markdown("$$\\color{blue}{\\Large Descriptive\\ Table}$$")
+
         FigureNumber += 1
         for cl in CL:
             st.markdown(f"$$\\color{{blue}}{{\\Large Descriptive\\ Table\\ {cl}}}$$")
-            DescriptiveTable(dataSpecGraphGroupsCL.get_group(cl), path + title + ' ' + cl)
+            f.write(markdown.markdown(f"Descriptive Table for {cl}"))
+            DescriptiveTable(dataSpecGraphGroupsCL.get_group(cl), path + title + ' ' + cl,f)
 
     with open(path + title + 'split.pickle', 'wb') as f:
         pickle.dump([pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df,
@@ -836,17 +852,20 @@ with col2:
 
 if st.session_state.analysis_running:
     st.info("Analysis is running...")
-
-    run_analysis(
-        path, ST, STgraph, MorphoFeatures, BpwFeatures,
-        SAMPLE, expList, CellSample, expListT, title, k_cluster,
-        MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
-        nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
-        nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-        CON, CL, wellCON, controls, HC, AE_model, model_name)  # Call the analysis function from the analysis module
+    with open("report_tables.html", "w") as f:
+        f.write("<html><body>")
+        run_analysis(
+            path, ST, STgraph, MorphoFeatures, BpwFeatures,
+            SAMPLE, expList, CellSample, expListT, title, k_cluster,
+            MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
+            nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
+            nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
+            CON, CL, wellCON, controls, HC, AE_model, model_name,f)  # Call the analysis function from the analysis module
+        f.write("</body></html>")
     # Place your analysis code here
     # Example: st.write("Parameters:", path, ST, STgraph, MorphoFeatures, ...)
     # After analysis is done, you can set:
     # st.session_state.analysis_running = False
     st.success("Analysis complete! You can rerun the analysis by clicking 'Run Analysis' again.")
+
 
