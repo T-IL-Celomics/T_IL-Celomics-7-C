@@ -6,6 +6,7 @@ import seaborn as sns
 from sklearn.preprocessing import LabelEncoder
 from util import *
 import markdown
+import ANOVA
 
 st.set_page_config(layout="wide")
 
@@ -15,7 +16,7 @@ def run_analysis(
         MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
         nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
         nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-        CON, CL, wellCON, controls, HC, AE_model, model_name,f):
+        CON, CL, wellCON, controls, HC, AE_model, model_name,f,uploaded_file):
 
     # Load data
     rawdata = pd.read_pickle(path + ST)
@@ -538,6 +539,13 @@ def run_analysis(
             f.write(markdown.markdown(f"Descriptive Table for {cl}"))
             DescriptiveTable(dataSpecGraphGroupsCL.get_group(cl), path + title + ' ' + cl,f)
 
+    # When the user uploads a summary table, it is passed to the ANOVA function,
+    # which reads the data, performs statistical analysis, and displays the results in the app.
+    st.title("ANOVA & Tukey HSD Results")
+
+    if uploaded_file:
+        ANOVA.ANOVA(uploaded_file,f)
+
     with open(path + title + 'split.pickle', 'wb') as f:
         pickle.dump([pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df,
                      dataSpecGraphN, dataEXP, Groups, Features, exp, pca], f)
@@ -589,6 +597,8 @@ path = st.text_input("Path to pickle files", value=""
                      , placeholder="e.g. D:\\path to folder\\TASC_pickles\\")
 if not path.endswith("\\"):
     path = path +"\\"
+
+uploaded_file = st.file_uploader("Upload your summary table (.xlsx)", type=["xlsx"])
 
 # File names
 ST = st.text_input("Raw data pickle filename", value="rawdata.pickle")
@@ -860,7 +870,7 @@ if st.session_state.analysis_running:
             MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
             nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
             nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-            CON, CL, wellCON, controls, HC, AE_model, model_name,f)  # Call the analysis function from the analysis module
+            CON, CL, wellCON, controls, HC, AE_model, model_name,f,uploaded_file)  # Call the analysis function from the analysis module
         f.write("</body></html>")
     # Place your analysis code here
     # Example: st.write("Parameters:", path, ST, STgraph, MorphoFeatures, ...)
