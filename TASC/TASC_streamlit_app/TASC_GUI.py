@@ -1,3 +1,5 @@
+import sys
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from util import *
 import markdown
 import ANOVA
+import WD_util
 
 st.set_page_config(layout="wide")
 
@@ -146,6 +149,20 @@ def run_analysis(
         Features=Features, AE_model=AE_model,
         model_name=model_name
     )
+    
+    with st.spinner("Calculating Wasserstein distance and generating heatmap..."):
+        wd_matrix = WD_util.wasserstein_comparing(pca_df,experiment_list= pca_df["Experiment"].unique().tolist())
+
+    if wd_matrix.size == 0 or wd_matrix.isna().all().all():
+        st.warning("No data available to plot the heatmap.")
+    else:
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.heatmap(wd_matrix, annot=True, fmt=".2f", cmap="viridis", ax=ax)
+        ax.set_title("Wasserstein Distance Heatmap")
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.savefig("wasserstein_heatmap.png", dpi=300)
+        plt.close(fig)
 
     # Show figures and results
     st.latex(f"\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}")
@@ -544,7 +561,8 @@ def run_analysis(
     st.title("ANOVA & Tukey HSD Results")
 
     if uploaded_file:
-        ANOVA.ANOVA(uploaded_file,f)
+        with st.spinner("creating ANOVA & Tukey HSD Results ..."):
+            ANOVA.ANOVA(uploaded_file,f)
 
     with open(path + title + 'split.pickle', 'wb') as f:
         pickle.dump([pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df,

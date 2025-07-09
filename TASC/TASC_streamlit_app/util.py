@@ -666,7 +666,7 @@ def PCA_colorPar1_titlePar2(pca, pca_df, Par1, Par2, figsize, labelsPar1='', lab
             legend_title = keys.pop(0)
             values.pop(0)
 
-        print(f"in func2 {legend_title} , {labels_handles_dic}")
+        
         if legend_title in labels_handles_dic:
             fig2.legend(
                 labels_handles_dic[legend_title][0],
@@ -716,7 +716,7 @@ def pcaPlotLabel(pca, pca_df, hue, title, labels, nColorLay=0, nShadesLay=0, xli
 
         if (leg_title not in labels_handles_dic) and (leg_title != ""):
             labels_handles_dic[leg_title] = (handles,labels)
-        print(f"func1 , {labels_handles_dic}")
+        
 
         f.legend(
             handles, labels,title=leg_title, bbox_to_anchor=(1.02, 1), loc=2,
