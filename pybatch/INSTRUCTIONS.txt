@@ -1,0 +1,42 @@
+PyBatch Batch Analysis GUI - Quick Start
+
+1. Prerequisites
+   - Windows PC (Excel installed for Imaris files)
+   - Python 3.8+ (use Anaconda if possible)
+   - All dependencies in requirements.txt
+
+2. Installation
+   a. Open Anaconda Prompt or CMD.
+   b. Navigate to the app folder.
+   c. Create a new environment:
+        conda create -n pybatch-env python=3.8
+        conda activate pybatch-env
+   d. Install dependencies:
+        pip install -r requirements.txt
+
+3. Launch the App
+   - Option A: Double-click pybatch.bat
+   - Option B: Run manually:
+        streamlit run pybatch.py
+
+4. Using the GUI
+   - Use the sidebar to select files and set analysis parameters.
+   - Follow on-screen prompts to upload data and run analysis.
+   - Plots and tables will display in the browser.
+   - Export results as PDF, Excel, or HTML as needed.
+
+5. Exporting Reports
+   - To save a summary or the current view as HTML, use the SingleFile browser extension, as the full page export may not scroll.
+   - Tables are saved in a separate HTML file for better accessibility.
+
+6. Troubleshooting
+   - If Excel-related errors occur, ensure Excel is installed and closed before launching PyBatch.
+   - For Streamlit errors, try restarting the app or your browser.
+   - To reset session data, refresh the browser page.
+
+7. Batch File Usage
+   - `pybatch.bat` launches the app in the correct environment (`tasc-env` or your custom environment).
+   - Edit the batch file if your environment name differs.
+
+
+---
