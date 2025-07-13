@@ -1,0 +1,57 @@
+
+# TASC GUI – User Instructions
+
+## 1. Installation
+
+- Install [Anaconda/Miniconda](https://docs.conda.io/) if you don't already have it.
+- Open a terminal/command prompt in the project folder.
+- Create and activate the environment:
+    conda create -n tasc-env python=3.8
+    conda activate tasc-env
+    pip install -r requirements.txt
+
+## 2. Running the GUI
+
+### Option A: Using the batch file (Windows)
+
+- Double-click `TASC.bat` to launch the GUI.
+  (This will activate the `tasc-env` environment automatically.)
+
+### Option B: From command line (all OS)
+
+- Run:
+    conda activate tasc-env
+    streamlit run TASC_GUI.py
+
+## 3. Using the GUI
+
+- The browser will open automatically.
+- Upload or select your data file as prompted.
+- Follow on-screen instructions to configure experiments, features, clustering, etc.
+- Click “Run Analysis” to begin.
+- View results, figures, and statistics.
+- Use export/download buttons to save plots or tables.
+- For best results, check your data matches expected column names:
+    - 'Experiment', 'PC1', 'Parent', etc.
+
+## 4. Saving/Exporting Results
+
+- **To save your analysis as an HTML file:**  
+  - Use the [SingleFile extension](https://github.com/gildas-lormeau/SingleFile) in Chrome or Firefox to capture the Streamlit session as a complete HTML file.
+  - If your analysis contains large tables, these tables are also exported to a separate HTML file (since saving everything in one page can make the HTML unscrollable).
+  - After saving, check your download folder for both the main HTML and the tables HTML file.
+
+## 5. Tips
+
+- For large datasets, use a machine with at least 8GB RAM.
+- The GUI detects and uses GPU for Autoencoder/PCA if available.
+
+## 6. Troubleshooting
+
+- If you get errors, check:
+    - Data columns and formats
+    - Dependencies (`pip install -r requirements.txt`)
+    - Try restarting your browser or running `streamlit run TASC_GUI.py` again
+
+---
+
