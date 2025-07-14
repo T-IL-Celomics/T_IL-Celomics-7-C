@@ -33,19 +33,29 @@
 - For best results, check your data matches expected column names:
     - 'Experiment', 'PC1', 'Parent', etc.
 
-## 4. Saving/Exporting Results
+## 4. Example Run
+
+An example run is included in the repository.
+You will find a sample input files (1.summary_table.xlsx , 2.TASC_pickles folder which contains rawdata.pickle and rawdatagraph.pickle) and the corresponding expected outputs (TASC_GUI.html , tables_report.html , wasserstein_heatmap.png) .
+
+To try it:
+    Launch the GUI as described above.
+    When prompted, select the sample input files and GUI inputs as configured in the run example.
+    Run the analysis to see how results should look.
+
+## 5. Saving/Exporting Results
 
 - **To save your analysis as an HTML file:**  
   - Use the [SingleFile extension](https://github.com/gildas-lormeau/SingleFile) in Chrome or Firefox to capture the Streamlit session as a complete HTML file.
   - If your analysis contains large tables, these tables are also exported to a separate HTML file (since saving everything in one page can make the HTML unscrollable).
   - After saving, check your download folder for both the main HTML and the tables HTML file.
 
-## 5. Tips
+## 6. Tips
 
 - For large datasets, use a machine with at least 8GB RAM.
 - The GUI detects and uses GPU for Autoencoder/PCA if available.
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 - If you get errors, check:
     - Data columns and formats

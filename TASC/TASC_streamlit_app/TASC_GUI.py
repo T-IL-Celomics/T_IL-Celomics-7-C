@@ -880,7 +880,7 @@ with col2:
 
 if st.session_state.analysis_running:
     st.info("Analysis is running...")
-    with open("report_tables.html", "w") as f:
+    with open("tables_report.html", "w") as f:
         f.write("<html><body>")
         run_analysis(
             path, ST, STgraph, MorphoFeatures, BpwFeatures,
