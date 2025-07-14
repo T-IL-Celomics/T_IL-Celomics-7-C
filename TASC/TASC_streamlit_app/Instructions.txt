@@ -30,7 +30,6 @@
 - Follow on-screen instructions to configure experiments, features, clustering, etc.
 - Click “Run Analysis” to begin.
 - View results, figures, and statistics.
-- Use export/download buttons to save plots or tables.
 - For best results, check your data matches expected column names:
     - 'Experiment', 'PC1', 'Parent', etc.
 
