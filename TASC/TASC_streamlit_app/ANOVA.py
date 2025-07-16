@@ -22,31 +22,55 @@ def ANOVA(summary_table_file,f):
         'Instantaneous_Speed': 'mean',
         'Displacement2': 'mean'
     })
-    # You can use either mean speed or mean displacement for ANOVA; I'll use speed here
-    grouped = grouped.rename(
-        columns={'Instantaneous_Speed': 'Mean_Instantaneous_Speed', 'Displacement2': 'Mean_Displacement2'})
+    # For Instantaneous Speed
+    anova_data_speed = grouped[['Experiment', 'Instantaneous_Speed']].rename(
+        columns={'Instantaneous_Speed': 'Mean_Value'})
 
-    # Use per-parent means for ANOVA (not just grand mean per experiment)
-    anova_data = grouped[['Experiment', 'Mean_Instantaneous_Speed']]
-    anova_data = anova_data.rename(columns={'Mean_Instantaneous_Speed': 'Mean_Value'})
+    # ANOVA for speed
+    model_speed = ols('Mean_Value ~ C(Experiment)', data=anova_data_speed).fit()
+    anova_table_speed = sm.stats.anova_lm(model_speed, typ=2)
 
-    # Perform one-way ANOVA
-    model = ols('Mean_Value ~ C(Experiment)', data=anova_data).fit()
-    anova_table = sm.stats.anova_lm(model, typ=2)
-    # Show ANOVA table
-    st.markdown("### ANOVA Results")
-    f.write(markdown.markdown("### ANOVA Results"))
-    st.dataframe(anova_table)
-    f.write(anova_table.to_html(index=True))
+    # Tukey HSD for speed
+    comp_speed = mc.MultiComparison(anova_data_speed['Mean_Value'], anova_data_speed['Experiment'])
+    tukey_result_speed = comp_speed.tukeyhsd()
+    tukey_df_speed = pd.DataFrame(data=tukey_result_speed._results_table.data[1:],
+                                  columns=tukey_result_speed._results_table.data[0])
 
-    # Tukey HSD post-hoc test
+    # For Displacement
+    anova_data_disp = grouped[['Experiment', 'Displacement2']].rename(
+        columns={'Displacement2': 'Mean_Value'})
 
-    comp = mc.MultiComparison(anova_data['Mean_Value'], anova_data['Experiment'])
-    tukey_result = comp.tukeyhsd()
-    tukey_df = pd.DataFrame(data=tukey_result._results_table.data[1:], columns=tukey_result._results_table.data[0])
+    # ANOVA for displacement
+    model_disp = ols('Mean_Value ~ C(Experiment)', data=anova_data_disp).fit()
+    anova_table_disp = sm.stats.anova_lm(model_disp, typ=2)
 
-    st.markdown("### Tukey HSD Post-hoc Test")
-    f.write(markdown.markdown("### ANOVA Results"))
-    st.dataframe(tukey_df)
-    f.write(tukey_df.to_html(index=True))
+    # Tukey HSD for displacement
+    comp_disp = mc.MultiComparison(anova_data_disp['Mean_Value'], anova_data_disp['Experiment'])
+    tukey_result_disp = comp_disp.tukeyhsd()
+    tukey_df_disp = pd.DataFrame(data=tukey_result_disp._results_table.data[1:],
+                                 columns=tukey_result_disp._results_table.data[0])
+
+    tukey_df_speed['Measurement'] = 'Instantaneous_Speed'
+    tukey_df_disp['Measurement'] = 'Displacement2'
+
+    # Concatenate the Tukey tables
+    tukey_combined = pd.concat([tukey_df_speed, tukey_df_disp], ignore_index=True)
+
+    # Show and write ANOVA results for Mean Instantaneous Speed
+    st.markdown("### ANOVA Results (Mean Instantaneous Speed)")
+    st.dataframe(anova_table_speed)
+    f.write("<h3>ANOVA Results (Mean Instantaneous Speed)</h3>")
+    f.write(anova_table_speed.to_html(index=True))
+
+    # Show and write ANOVA results for Mean Displacement
+    st.markdown("### ANOVA Results (Mean Displacement2)")
+    st.dataframe(anova_table_disp)
+    f.write("<h3>ANOVA Results (Mean Displacement2)</h3>")
+    f.write(anova_table_disp.to_html(index=True))
+
+    # Show and write the combined table
+    st.markdown("### Combined Tukey HSD Table (Both Measurements)")
+    st.dataframe(tukey_combined)
+    f.write("<h3>Combined Tukey HSD Table (Both Measurements)</h3>")
+    f.write(tukey_combined.to_html(index=True))
 
