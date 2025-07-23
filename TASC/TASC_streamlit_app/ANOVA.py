@@ -7,25 +7,30 @@ import statsmodels.stats.multicomp as mc
 import streamlit as st
 
 
-def ANOVA(summary_table_file,f):
+
+def ANOVA(summary_files,f):
     # Read Excel file (replace path with your own)
-    data = pd.read_excel(summary_table_file, sheet_name=0)
+
+    dfs = [pd.read_excel(f) for f in summary_files]
+    data = pd.concat(dfs, ignore_index=True)
 
     names = data['Experiment'].unique()
+
     # Clean up experiment names
     name_map = dict([(names[i],names[i][15:-4].replace('NNN0', '')) for i in range(len(names))])
 
     data['Experiment'] = data['Experiment'].replace(name_map)
-
     # Group by Experiment and Parent and calculate means
-    grouped = data.groupby(['Experiment', 'Parent'], as_index=False).agg({
+    grouped = data.groupby(['Experiment','Parent'], as_index=False).agg({
         'Instantaneous_Speed': 'mean',
         'Displacement2': 'mean'
     })
+
     # For Instantaneous Speed
     anova_data_speed = grouped[['Experiment', 'Instantaneous_Speed']].rename(
         columns={'Instantaneous_Speed': 'Mean_Value'})
 
+    anova_data_speed = anova_data_speed.dropna(subset=['Experiment', 'Mean_Value'])
     # ANOVA for speed
     model_speed = ols('Mean_Value ~ C(Experiment)', data=anova_data_speed).fit()
     anova_table_speed = sm.stats.anova_lm(model_speed, typ=2)
@@ -39,6 +44,8 @@ def ANOVA(summary_table_file,f):
     # For Displacement
     anova_data_disp = grouped[['Experiment', 'Displacement2']].rename(
         columns={'Displacement2': 'Mean_Value'})
+
+    anova_data_disp = anova_data_disp.dropna(subset=['Experiment', 'Mean_Value'])
 
     # ANOVA for displacement
     model_disp = ols('Mean_Value ~ C(Experiment)', data=anova_data_disp).fit()

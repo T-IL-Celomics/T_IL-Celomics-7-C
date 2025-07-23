@@ -1,5 +1,5 @@
 import sys
-
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,6 +10,7 @@ from util import *
 import markdown
 import ANOVA
 import WD_util
+import glob
 
 st.set_page_config(layout="wide")
 
@@ -19,7 +20,7 @@ def run_analysis(
         MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
         nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
         nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-        CON, CL, wellCON, controls, HC, AE_model, model_name,f,uploaded_file):
+        CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files):
 
     # Load data
     rawdata = pd.read_pickle(path + ST)
@@ -149,7 +150,7 @@ def run_analysis(
         Features=Features, AE_model=AE_model,
         model_name=model_name
     )
-    
+
     with st.spinner("Calculating Wasserstein distance and generating heatmap..."):
         wd_matrix = WD_util.wasserstein_comparing(pca_df,experiment_list= pca_df["Experiment"].unique().tolist())
 
@@ -560,9 +561,9 @@ def run_analysis(
     # which reads the data, performs statistical analysis, and displays the results in the app.
     st.title("ANOVA & Tukey HSD Results")
 
-    if uploaded_file:
+    if summary_files:
         with st.spinner("creating ANOVA & Tukey HSD Results ..."):
-            ANOVA.ANOVA(uploaded_file,f)
+            ANOVA.ANOVA(summary_files,f)
 
     with open(path + title + 'split.pickle', 'wb') as f:
         pickle.dump([pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df,
@@ -607,6 +608,7 @@ with st.expander("Show Example Input"):
     CL = ['293T']
     wellCON = ['AM001100425CHR2B02293TNNIRNOCOWH00']
     controls = []
+    summary_dir_path = "D:\\jeries\\output"
     ```
     """)
 
@@ -615,8 +617,6 @@ path = st.text_input("Path to pickle files", value=""
                      , placeholder="e.g. D:\\path to folder\\TASC_pickles\\")
 if not path.endswith("\\"):
     path = path +"\\"
-
-uploaded_file = st.file_uploader("Upload your summary table (.xlsx)", type=["xlsx"])
 
 # File names
 ST = st.text_input("Raw data pickle filename", value="rawdata.pickle")
@@ -859,6 +859,20 @@ controls = st.text_area("controls (leave blank for none)", value="").splitlines(
 # Sorting controls by length to avoid problems later
 controls.sort(key=len, reverse=True)
 
+#summary_files_path
+summary_dir_path = st.text_input("Enter the directory path containing the summary files:")
+summary_files = None
+
+if summary_dir_path:
+    if not os.path.isdir(summary_dir_path):
+        st.error("❌ Directory does not exist. Please enter a valid path.")
+    else:
+        summary_files = glob.glob(os.path.join(summary_dir_path, "*_FULL.xlsx"))
+        if not summary_files:
+            st.warning("⚠️ No files ending with _FULL.xlsx found in this directory.")
+        else:
+            st.success(f"✅ Found {len(summary_files)} summary files for {len(summary_files)} different wells")
+
 # Hierarchical clustering and AE model
 HC = False
 AE_model = False
@@ -888,7 +902,7 @@ if st.session_state.analysis_running:
             MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
             nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
             nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-            CON, CL, wellCON, controls, HC, AE_model, model_name,f,uploaded_file)  # Call the analysis function from the analysis module
+            CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files)  # Call the analysis function from the analysis module
         f.write("</body></html>")
     # Place your analysis code here
     # Example: st.write("Parameters:", path, ST, STgraph, MorphoFeatures, ...)
