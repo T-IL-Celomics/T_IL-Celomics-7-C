@@ -70,7 +70,7 @@ Built with Streamlit, TASC integrates powerful statistical tools, PCA, autoencod
 - **To save your analysis session as an HTML file**, use the [SingleFile browser extension](https://github.com/gildas-lormeau/SingleFile) (available for Chrome/Firefox).
     - Open your completed analysis in the browser, click the SingleFile extension icon to save the whole page as HTML.
     - **Note:** Large tables are also saved separately to another HTML file, as the main Streamlit export can become unscrollable when too many tables are included.
-    - After saving, you will have one HTML file for the Streamlit app and another HTML file for the tables, both in the chosen folder.
+    - After saving, you will have one HTML file for the GUI output screenshot and another HTML file for the tables (tables_report.html), both in the chosen folder.
 
 ---
 

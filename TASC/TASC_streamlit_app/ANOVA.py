@@ -5,6 +5,7 @@ import statsmodels.api as sm
 import scikit_posthocs as sp
 import statsmodels.stats.multicomp as mc
 import streamlit as st
+import os
 
 
 
@@ -81,3 +82,14 @@ def ANOVA(summary_files,f):
     f.write("<h3>Combined Tukey HSD Table (Both Measurements)</h3>")
     f.write(tukey_combined.to_html(index=True))
 
+    # Get the directory where the current Python file is located
+    output_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Define the output file path
+    output_file = os.path.join(output_dir, "tukey_combined.xlsx")
+
+    # Write the Tukey combined table to Excel
+    tukey_combined.to_excel(output_file, index=False)
+
+    # Optional: Let user know where the file was saved
+    st.success(f"Tukey combined table saved to: {output_file}")

@@ -36,7 +36,7 @@
 ## 4. Example Run
 
 An example run is included in the repository.
-You will find a sample input files (1.summary_table.xlsx , 2.TASC_pickles folder which contains rawdata.pickle and rawdatagraph.pickle) and the corresponding expected outputs (TASC_GUI.html , tables_report.html , wasserstein_heatmap.png) .
+You will find a sample input files (1.summary_table.xlsx , 2.TASC_pickles folder which contains rawdata.pickle and rawdatagraph.pickle) and the corresponding expected outputs (TASC_GUI.html , tables_report.html , wasserstein_heatmap.png , tukey_combined.xlsx) .
 
 To try it:
     Launch the GUI as described above.
@@ -49,6 +49,7 @@ To try it:
   - Use the [SingleFile extension](https://github.com/gildas-lormeau/SingleFile) in Chrome or Firefox to capture the Streamlit session as a complete HTML file.
   - If your analysis contains large tables, these tables are also exported to a separate HTML file (since saving everything in one page can make the HTML unscrollable).
   - After saving, check your download folder for both the main HTML and the tables HTML file.
+  - To download any table shown in the GUI, hover your mouse cursor over the table. A small toolbar will appear in the top-right corner of the table. Click the first icon from the left to download the table as a CSV file.
 
 ## 6. Tips
 
