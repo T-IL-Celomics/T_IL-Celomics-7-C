@@ -186,6 +186,8 @@ DICTS = ["min_max_dict", "middles_dict", "layers_min_max_dict", "scratch_dict", 
 
 POSITIONS = ["x_Pos", "y_Pos", "z_Pos"]
 
+average_df = None
+
 class PDF(FPDF):
     pass
 """ # return this if you want page numbers
@@ -883,6 +885,7 @@ class Batch_Experiment(object):
             plt.show()
 
     def make_scratch_pages(self):
+        print("making scratch pages")
         output_folder = os.path.join(self.output_path, "scratches")
         try:
             os.mkdir(output_folder)
@@ -1050,6 +1053,7 @@ class Batch_Experiment(object):
             plt.show()
 
     def draw_average_barplot(self, parameter, output_folder=None, absolute=False, wave=False, alt_name=None, per_cell=False):
+        global average_df
         fig, graph_ax = plt.subplots()
         graph_ax.set_title("%d%s - Average " % (self.pdf.page_no(), chr(self.graph_counter)) + parameter)
         self.graph_counter += 1
@@ -1061,6 +1065,8 @@ class Batch_Experiment(object):
         height = []
         yerrors = []
         x_tick_labels = []
+        exp_col = []
+        values_col = []
         for idx, well in enumerate(self.wells):
             well_df = self.well_info[well]
             if parameter not in well_df.columns:
@@ -1091,10 +1097,20 @@ class Batch_Experiment(object):
             if absolute:
                 values = np.absolute(values)
 
+        
+            exp_col.append(well)
+            values_col.append(sum(values)/len(values))
+
             x.append(len(x))  # index for bar position
             height.append(np.average(values))
             yerrors.append(np.std(values) / (len(values) ** 0.5))
             x_tick_labels.append(self.shortened_well_names[well])
+
+        df = pd.DataFrame({"Experiment":exp_col , "Parameter":[parameter]*len(exp_col) , "Average_Value":values_col})
+        if average_df is None:
+            average_df = df
+        else:
+            average_df = pd.concat([average_df,df], ignore_index=True)
 
         graph_ax.bar(x, height, color=LINE_COLORS[:len(x)], yerr=yerrors)
         graph_ax.set_xticks(x)
@@ -1111,6 +1127,7 @@ class Batch_Experiment(object):
             plt.show()
 
     def make_average_page(self, parameter, absolute=False):
+
         title = parameter + " average values"
         if absolute:
             title = "absolute " + title
@@ -1723,6 +1740,9 @@ class Batch_Experiment(object):
         print("\tFinal steps...")
         self.pdf.output(os.path.join(output_path, self.exp_name + "_report.pdf"))
         #self.dump_dicts(output_path)
+
+        average_df.to_excel(output_path + "\\average_parameter_values.xlsx")
+
         pr.disable()
         s = io.StringIO()
         ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
