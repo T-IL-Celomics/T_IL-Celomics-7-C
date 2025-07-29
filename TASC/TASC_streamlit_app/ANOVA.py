@@ -7,6 +7,11 @@ import statsmodels.stats.multicomp as mc
 import streamlit as st
 import os
 
+parameters = ["Area", "Displacement_From_Last_Id", "Instantaneous_Speed", "Velocity_X", "Velocity_Y", "Velocity_Z", "Coll", "Coll_CUBE", "Acceleration", "Acceleration_X",
+                     "Acceleration_Y", "Acceleration_Z", "Displacement2", "Directional_Change", "Directional_Change_X", "Directional_Change_Y", "Directional_Change_Z", "Volume",
+                     "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B", "Eccentricity_C", "Sphericity", "EllipsoidAxisLengthB",
+                     "EllipsoidAxisLengthC", "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X", "Ellip_Ax_C_Y", "Ellip_Ax_C_Z", "Instantaneous_Angle",
+                     "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z", "Min_Distance"]
 
 
 def ANOVA(summary_files,f):
@@ -21,60 +26,41 @@ def ANOVA(summary_files,f):
     name_map = dict([(names[i],names[i][15:-4].replace('NNN0', '')) for i in range(len(names))])
 
     data['Experiment'] = data['Experiment'].replace(name_map)
-    # Group by Experiment and Parent and calculate means
-    grouped = data.groupby(['Experiment','Parent'], as_index=False).agg({
-        'Instantaneous_Speed': 'mean',
-        'Displacement2': 'mean'
-    })
+    # Group by Experiment and Parent, calculate means for all available parameters
+    agg_dict = {param: 'mean' for param in parameters if param in data.columns}
+    grouped = data.groupby(['Experiment', 'Parent'], as_index=False).agg(agg_dict)
 
-    # For Instantaneous Speed
-    anova_data_speed = grouped[['Experiment', 'Instantaneous_Speed']].rename(
-        columns={'Instantaneous_Speed': 'Mean_Value'})
+    tukey_dict = {}
+    tukey_combined = None
 
-    anova_data_speed = anova_data_speed.dropna(subset=['Experiment', 'Mean_Value'])
-    # ANOVA for speed
-    model_speed = ols('Mean_Value ~ C(Experiment)', data=anova_data_speed).fit()
-    anova_table_speed = sm.stats.anova_lm(model_speed, typ=2)
+    for param in agg_dict:
+        anova_data = grouped[['Experiment', param]].rename(columns={param: 'Mean_Value'})
+        anova_data = anova_data.dropna(subset=['Experiment', 'Mean_Value'])
 
-    # Tukey HSD for speed
-    comp_speed = mc.MultiComparison(anova_data_speed['Mean_Value'], anova_data_speed['Experiment'])
-    tukey_result_speed = comp_speed.tukeyhsd()
-    tukey_df_speed = pd.DataFrame(data=tukey_result_speed._results_table.data[1:],
-                                  columns=tukey_result_speed._results_table.data[0])
+        # Only proceed if there are at least 2 groups and at least some data
+        if anova_data['Experiment'].nunique() < 2 or anova_data['Mean_Value'].isna().all():
+            continue
 
-    # For Displacement
-    anova_data_disp = grouped[['Experiment', 'Displacement2']].rename(
-        columns={'Displacement2': 'Mean_Value'})
+        # ANOVA
+        model = ols('Mean_Value ~ C(Experiment)', data=anova_data).fit()
+        anova_table = sm.stats.anova_lm(model, typ=2)
 
-    anova_data_disp = anova_data_disp.dropna(subset=['Experiment', 'Mean_Value'])
+        # Tukey HSD
+        comp = mc.MultiComparison(anova_data['Mean_Value'], anova_data['Experiment'])
+        tukey_result = comp.tukeyhsd()
+        tukey_df = pd.DataFrame(data=tukey_result._results_table.data[1:], columns=tukey_result._results_table.data[0])
+        tukey_df['Measurement'] = param
+        tukey_dict[param] = tukey_df
+        if tukey_combined is None:
+            tukey_combined = tukey_df
+        else:
+            tukey_combined = pd.concat([tukey_combined, tukey_df], ignore_index=True)
 
-    # ANOVA for displacement
-    model_disp = ols('Mean_Value ~ C(Experiment)', data=anova_data_disp).fit()
-    anova_table_disp = sm.stats.anova_lm(model_disp, typ=2)
-
-    # Tukey HSD for displacement
-    comp_disp = mc.MultiComparison(anova_data_disp['Mean_Value'], anova_data_disp['Experiment'])
-    tukey_result_disp = comp_disp.tukeyhsd()
-    tukey_df_disp = pd.DataFrame(data=tukey_result_disp._results_table.data[1:],
-                                 columns=tukey_result_disp._results_table.data[0])
-
-    tukey_df_speed['Measurement'] = 'Instantaneous_Speed'
-    tukey_df_disp['Measurement'] = 'Displacement2'
-
-    # Concatenate the Tukey tables
-    tukey_combined = pd.concat([tukey_df_speed, tukey_df_disp], ignore_index=True)
-
-    # Show and write ANOVA results for Mean Instantaneous Speed
-    st.markdown("### ANOVA Results (Mean Instantaneous Speed)")
-    st.dataframe(anova_table_speed)
-    f.write("<h3>ANOVA Results (Mean Instantaneous Speed)</h3>")
-    f.write(anova_table_speed.to_html(index=True))
-
-    # Show and write ANOVA results for Mean Displacement
-    st.markdown("### ANOVA Results (Mean Displacement2)")
-    st.dataframe(anova_table_disp)
-    f.write("<h3>ANOVA Results (Mean Displacement2)</h3>")
-    f.write(anova_table_disp.to_html(index=True))
+        # Display and write results for each parameter
+        st.markdown(f"### ANOVA Results ({param})")
+        st.dataframe(anova_table)
+        f.write(f"<h3>ANOVA Results ({param})</h3>")
+        f.write(anova_table.to_html(index=True))
 
     # Show and write the combined table
     st.markdown("### Combined Tukey HSD Table (Both Measurements)")
@@ -82,14 +68,13 @@ def ANOVA(summary_files,f):
     f.write("<h3>Combined Tukey HSD Table (Both Measurements)</h3>")
     f.write(tukey_combined.to_html(index=True))
 
-    # Get the directory where the current Python file is located
+    # Save all Tukey results to a multi-sheet Excel
     output_dir = os.path.dirname(os.path.abspath(__file__))
+    output_file = os.path.join(output_dir, "tukey_results.xlsx")
+    with pd.ExcelWriter(output_file) as writer:
+        for param, tukey_df in tukey_dict.items():
+            tukey_df.to_excel(writer, sheet_name=param[:31], index=False)  # Excel limit: 31 chars for sheet name
 
-    # Define the output file path
-    output_file = os.path.join(output_dir, "tukey_combined.xlsx")
+    st.success(f"Tukey results saved to multi-sheet Excel: {output_file}")
 
-    # Write the Tukey combined table to Excel
-    tukey_combined.to_excel(output_file, index=False)
-
-    # Optional: Let user know where the file was saved
-    st.success(f"Tukey combined table saved to: {output_file}")
+    

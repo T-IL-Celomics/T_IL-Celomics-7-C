@@ -36,7 +36,7 @@
 ## 4. Example Run
 
 An example run is included in the repository.
-You will find a sample input files (1.summary_table.xlsx , 2.TASC_pickles folder which contains rawdata.pickle and rawdatagraph.pickle) and the corresponding expected outputs (TASC_GUI.html , tables_report.html , wasserstein_heatmap.png , tukey_combined.xlsx) .
+You will find a sample input files (1.summary_table.xlsx , 2.TASC_pickles folder which contains rawdata.pickle and rawdatagraph.pickle) and the corresponding expected outputs (TASC_GUI.html , tables_report.html , wasserstein_heatmap.png , tukey_results.xlsx) .
 
 To try it:
     Launch the GUI as described above.
