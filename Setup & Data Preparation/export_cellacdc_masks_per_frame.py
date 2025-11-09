@@ -6,7 +6,6 @@ import tifffile as tiff
 CAND_KEYS = ("segm", "labels", "label", "masks", "segm_img", "arr_0")
 
 def load_labels(npz_path):
-    # safer first
     try:
         npz = np.load(npz_path, allow_pickle=False)
     except Exception:
@@ -22,34 +21,62 @@ def guess_axes(arr, user_axes):
     if user_axes:
         return user_axes.upper()
     if arr.ndim == 2:  return "YX"
-    if arr.ndim == 3:  return "TYX"   # if yours is ZYX, pass --axes ZYX
+    if arr.ndim == 3:  return "TYX"
     if arr.ndim == 4:  return "TZYX"
     raise ValueError(f"Unsupported ndim={arr.ndim}")
 
 def ensure_outdir(path): os.makedirs(path, exist_ok=True)
 
 def to_green(mask2d):
-    """Return an 8-bit RGB image where mask>0 is pure green."""
     rgb = np.zeros(mask2d.shape + (3,), dtype=np.uint8)
     rgb[..., 1] = (mask2d > 0).astype(np.uint8) * 255
     return rgb
 
-def export_per_frame(arr, axes, outdir, base, split_z=False, green=True):
+def shift_y_keep_size(img2d, shift_y):
+    """
+    Positive shift_y -> move image UP:
+        pad bottom, cut top
+    Negative shift_y -> move image DOWN:
+        pad top, cut bottom
+    Size stays the same.
+    """
+    if shift_y == 0:
+        return img2d
+
+    h, w = img2d.shape
+
+    if shift_y > 0:
+        # move UP: add zeros at bottom, remove from top
+        pad = np.zeros((shift_y, w), dtype=img2d.dtype)
+        img = np.vstack([img2d, pad])   # taller
+        img = img[shift_y:, :]          # drop top rows -> back to original height
+        return img
+    else:
+        # shift_y < 0 -> move DOWN: add zeros at top, remove from bottom
+        shift = -shift_y
+        pad = np.zeros((shift, w), dtype=img2d.dtype)
+        img = np.vstack([pad, img2d])
+        img = img[:h, :]                # drop bottom rows
+        return img
+
+def export_per_frame(arr, axes, outdir, base, split_z=False, green=True, shift_y=0):
     axes = axes.upper()
 
     if axes == "YX":
+        frame = shift_y_keep_size(arr, shift_y)
         out = os.path.join(outdir, f"{base}_t0000.tif")
-        tiff.imwrite(out, arr)  # raw labels
+        tiff.imwrite(out, frame)
         if green:
-            tiff.imwrite(out.replace(".tif", "_green.tif"), to_green(arr), photometric="rgb")
+            tiff.imwrite(out.replace(".tif", "_green.tif"), to_green(frame), photometric="rgb")
         print(f"Saved 1 frame to {outdir}")
         return
 
     if axes == "TYX":
         T = arr.shape[0]
         for t in range(T):
-            out = os.path.join(outdir, f"{base}_t{t:04d}.tif")
             frame = arr[t]
+            frame = shift_y_keep_size(frame, shift_y)
+            out = os.path.join(outdir, f"{base}_t{t:04d}.tif")
             tiff.imwrite(out, frame)
             if green:
                 tiff.imwrite(out.replace(".tif", "_green.tif"), to_green(frame), photometric="rgb")
@@ -60,17 +87,18 @@ def export_per_frame(arr, axes, outdir, base, split_z=False, green=True):
         Z = arr.shape[0]
         if split_z:
             for z in range(Z):
+                plane = shift_y_keep_size(arr[z], shift_y)
                 out = os.path.join(outdir, f"{base}_z{z:04d}.tif")
-                plane = arr[z]
                 tiff.imwrite(out, plane)
                 if green:
                     tiff.imwrite(out.replace(".tif", "_green.tif"), to_green(plane), photometric="rgb")
             print(f"Wrote {Z} planes (ZYX split) to {outdir}")
         else:
+            shifted_stack = np.stack([shift_y_keep_size(arr[z], shift_y) for z in range(Z)], axis=0)
             out = os.path.join(outdir, f"{base}_zstack.tif")
-            tiff.imwrite(out, arr)  # raw labels as multipage
+            tiff.imwrite(out, shifted_stack)
             if green:
-                green_stack = np.stack([to_green(arr[z]) for z in range(Z)], axis=0)  # (Z, Y, X, 3)
+                green_stack = np.stack([to_green(shifted_stack[z]) for z in range(Z)], axis=0)
                 tiff.imwrite(out.replace(".tif", "_green.tif"), green_stack, photometric="rgb")
             print(f"Saved Z-stack (ZYX) to {outdir}")
         return
@@ -80,19 +108,20 @@ def export_per_frame(arr, axes, outdir, base, split_z=False, green=True):
         if split_z:
             for t in range(T):
                 for z in range(Z):
+                    plane = shift_y_keep_size(arr[t, z], shift_y)
                     out = os.path.join(outdir, f"{base}_t{t:04d}_z{z:04d}.tif")
-                    plane = arr[t, z]
                     tiff.imwrite(out, plane)
                     if green:
                         tiff.imwrite(out.replace(".tif", "_green.tif"), to_green(plane), photometric="rgb")
             print(f"Wrote {T*Z} planes (TZYX split) to {outdir}")
         else:
             for t in range(T):
+                zstack = arr[t]
+                shifted_stack = np.stack([shift_y_keep_size(zstack[z], shift_y) for z in range(Z)], axis=0)
                 out = os.path.join(outdir, f"{base}_t{t:04d}.tif")
-                zstack = arr[t]                                # (Z, Y, X)
-                tiff.imwrite(out, zstack)                      # raw labels
+                tiff.imwrite(out, shifted_stack)
                 if green:
-                    green_stack = np.stack([to_green(zstack[z]) for z in range(Z)], axis=0)  # (Z, Y, X, 3)
+                    green_stack = np.stack([to_green(shifted_stack[z]) for z in range(Z)], axis=0)
                     tiff.imwrite(out.replace(".tif", "_green.tif"), green_stack, photometric="rgb")
             print(f"Wrote {T} Z-stacks (one per time) to {outdir}")
         return
@@ -106,6 +135,8 @@ def main():
     ap.add_argument("--axes", default="", help="YX, TYX, ZYX, or TZYX (default guesses: 2D→YX, 3D→TYX, 4D→TZYX)")
     ap.add_argument("--split-z", action="store_true", help="When Z present, write one TIFF per z-plane")
     ap.add_argument("--no-green", action="store_true", help="Do not write green visualization TIFFs")
+    ap.add_argument("--shift-y", type=int, default=0,
+                    help="Translate image in Y (pixels). Positive -> pad bottom, cut top (move UP). Negative -> pad top, cut bottom (move DOWN).")
     args = ap.parse_args()
 
     for segm_path in args.inputs:
@@ -116,8 +147,13 @@ def main():
         ensure_outdir(outdir)
         base = os.path.splitext(os.path.basename(segm_path))[0].replace("_segm", "").replace(".npz", "")
 
-        print(f"\nInput: {segm_path}\nshape={arr.shape}  dtype={arr.dtype}  axes={axes}")
-        export_per_frame(arr, axes, outdir, base, split_z=args.split_z, green=(not args.no_green))
+        print(f"\nInput: {segm_path}\nshape={arr.shape}  dtype={arr.dtype}  axes={axes}  shift_y={args.shift_y}")
+        export_per_frame(
+            arr, axes, outdir, base,
+            split_z=args.split_z,
+            green=(not args.no_green),
+            shift_y=args.shift_y
+        )
 
 if __name__ == "__main__":
     main()
