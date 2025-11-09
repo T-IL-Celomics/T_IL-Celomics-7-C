@@ -25,7 +25,14 @@ pip install numpy tifffile
 ## Usage
 
 ```bash
+# Basic export (default)
 python export_cellacdc_masks_per_frame.py /path/to/Position_1/Images/sample_s01_segm.npz
+
+# Export with Y-shift correction (move mask up by 20 px, keep same size)
+python export_cellacdc_masks_per_frame.py /path/to/Position_1/Images/sample_s01_segm.npz --shift-y 20
+
+# Export with Y-shift correction (move mask down by 20 px)
+python export_cellacdc_masks_per_frame.py /path/to/Position_1/Images/sample_s01_segm.npz --shift-y -20
 ```
 
 ### CLI options
