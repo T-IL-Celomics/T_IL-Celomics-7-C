@@ -1,0 +1,130 @@
+forecasting:
+  model_name: TimesFM_1_0_200m
+  framework: TimesFM
+  model_type: foundation
+  use_case_name: cell_movement_test
+  model_output: default
+  experiment_path: ./mlruns/cell_movement_exp
+
+  freq: H
+  prediction_length: 5
+  backtest_length: 5
+  stride: 1 
+  limit_num_series: 1000
+
+  metric: rmse
+  target: y
+  date_col: ds
+  group_id: unique_id
+
+  evaluation_output: eval_out
+  scoring_output: score_out
+
+  dynamic_historical_numerical: []
+  dynamic_future_numerical: []
+  dynamic_future_categorical: []
+  dynamic_historical_categorical: []
+  static_features: []
+  static_categorical: []
+
+  active_models:
+    - ChronosT5Tiny
+    - ChronosT5Mini
+    - ChronosT5Small
+    - ChronosT5Base
+    - ChronosT5Large
+    - ChronosBoltTiny
+    - ChronosBoltMini
+    - ChronosBoltSmall
+    - ChronosBoltBase
+    - MoiraiSmall
+    - MoiraiBase
+    - MoiraiLarge
+    - MoiraiMoESmall
+    - MoiraiMoEBase
+    - TimesFM_1_0_200m
+    - TimesFM_2_0_500m
+
+models:
+  ChronosT5Tiny:
+    model_class: ChronosT5Tiny
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosT5Mini:
+    model_class: ChronosT5Mini
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosT5Small:
+    model_class: ChronosT5Small
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosT5Base:
+    model_class: ChronosT5Base
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosT5Large:
+    model_class: ChronosT5Large
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosBoltTiny:
+    model_class: ChronosBoltTiny
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosBoltMini:
+    model_class: ChronosBoltMini
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosBoltSmall:
+    model_class: ChronosBoltSmall
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+  ChronosBoltBase:
+    model_class: ChronosBoltBase
+    module: mmf_sa.models.chronosforecast.ChronosPipeline
+    model_type: foundation
+    framework: Chronos
+
+  MoiraiSmall:
+    model_class: MoiraiSmall
+    module: mmf_sa.models.moiraiforecast.MoiraiPipeline
+    model_type: foundation
+    framework: Moirai
+  MoiraiBase:
+    model_class: MoiraiBase
+    module: mmf_sa.models.moiraiforecast.MoiraiPipeline
+    model_type: foundation
+    framework: Moirai
+  MoiraiLarge:
+    model_class: MoiraiLarge
+    module: mmf_sa.models.moiraiforecast.MoiraiPipeline
+    model_type: foundation
+    framework: Moirai
+  MoiraiMoESmall:
+    model_class: MoiraiMoESmall
+    module: mmf_sa.models.moiraiforecast.MoiraiPipeline
+    model_type: foundation
+    framework: Moirai
+  MoiraiMoEBase:
+    model_class: MoiraiMoEBase
+    module: mmf_sa.models.moiraiforecast.MoiraiPipeline
+    model_type: foundation
+    framework: Moirai
+
+  TimesFM_1_0_200m:
+    model_class: TimesFM_1_0_200m
+    module: mmf_sa.models.timesfmforecast.TimesFMPipeline
+    model_type: foundation
+    framework: TimesFM
+  TimesFM_2_0_500m:
+    model_class: TimesFM_2_0_500m
+    module: mmf_sa.models.timesfmforecast.TimesFMPipeline
+    model_type: foundation
+    framework: TimesFM
