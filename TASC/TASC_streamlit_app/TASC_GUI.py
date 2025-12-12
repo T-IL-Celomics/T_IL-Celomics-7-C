@@ -157,8 +157,13 @@ def run_analysis(
     if wd_matrix.size == 0 or wd_matrix.isna().all().all():
         st.warning("No data available to plot the heatmap.")
     else:
+        names = wd_matrix.index.tolist()
+        name_map = dict([(names[i], names[i][15:-4].replace('NNN0', '')) for i in range(len(names))])
+
+        wd_matrix_renamed = wd_matrix.rename(index=name_map, columns=name_map)
+
         fig, ax = plt.subplots(figsize=(10, 8))
-        sns.heatmap(wd_matrix, annot=True, fmt=".2f", cmap="viridis", ax=ax)
+        sns.heatmap(wd_matrix_renamed, annot=True, fmt=".2f", cmap="viridis", ax=ax)
         ax.set_title("Wasserstein Distance Heatmap")
         plt.tight_layout()
         st.pyplot(fig)

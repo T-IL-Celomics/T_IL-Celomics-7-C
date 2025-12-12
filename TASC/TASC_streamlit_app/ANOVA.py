@@ -63,9 +63,9 @@ def ANOVA(summary_files,f):
         f.write(anova_table.to_html(index=True))
 
     # Show and write the combined table
-    st.markdown("### Combined Tukey HSD Table (Both Measurements)")
+    st.markdown("### Combined Tukey HSD Table (all Measurements)")
     st.dataframe(tukey_combined)
-    f.write("<h3>Combined Tukey HSD Table (Both Measurements)</h3>")
+    f.write("<h3>Combined Tukey HSD Table (all Measurements)</h3>")
     f.write(tukey_combined.to_html(index=True))
 
     # Save all Tukey results to a multi-sheet Excel
