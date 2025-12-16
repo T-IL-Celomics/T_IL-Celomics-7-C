@@ -1,0 +1,14 @@
+{
+    "Acceleration_OLD": "ChronosBoltTiny",
+    "Coll": "TimesFM_1_0_200m",
+    "Instantaneous_Speed": "TimesFM_2_0_500m",
+    "Directional_Change": "TimesFM_1_0_200m",
+    "Displacement2": "ChronosT5Tiny",
+    "Current_MSD_1": "ChronosT5Base",
+    "Ellipticity_oblate": "ChronosBoltBase",
+    "Ellipticity_prolate": "ChronosBoltSmall",
+    "EllipsoidAxisLengthB": "ChronosBoltMini",
+    "EllipsoidAxisLengthC": "TimesFM_2_0_500m",
+    "Sphericity": "TimesFM_2_0_500m",
+    "Eccentricity": "ChronosBoltBase"
+}

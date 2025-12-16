@@ -112,16 +112,9 @@ class ChronosForecaster(ForecastingRegressor):
         for uid in tqdm(unique_ids, desc=f"Evaluating ({self.repo})", unit="cell"):
             series = hist_df[hist_df[self.params["group_id"]] == uid]
 
-            # Determine the device to use for the input tensor
-            if "t5" in self.repo.lower():
-                context_device = "cpu"
-            else:
-                context_device = pipeline.model.device
-
             context = torch.tensor(
                 series[self.params["target"]].tolist(),
-                dtype=torch.float32,
-                device=context_device
+                dtype=torch.float32
             ).unsqueeze(0)
 
             forecast = pipeline.predict(

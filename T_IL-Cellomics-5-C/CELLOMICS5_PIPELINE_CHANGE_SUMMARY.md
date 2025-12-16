@@ -279,6 +279,47 @@ All three files now:
 
 ---
 
+## GPU Optimization and MIORAI Module Installation (December 16, 2025)
+
+### GPU Optimization Improvements
+
+**Objective**: Make the forecasting code more GPU-appropriate to leverage hardware acceleration and improve performance
+
+**Changes Made**:
+1. **Enhanced GPU utilization** across all model pipelines:
+   - `ChronosPipeline.py`
+   - `TimesFMPipeline.py`
+   - `MoiraiPipeline.py`
+
+2. **GPU-specific optimizations**:
+   - Ensured proper memory management for GPU tensors
+   - Optimized batch processing for GPU acceleration
+   - Improved device placement for tensor operations
+
+**Impact**: 
+- Faster model inference and training when GPU is available
+- Reduced CPU bottlenecks in forecasting computations
+- More efficient resource utilization
+
+### MIORAI Modules Installation
+
+**Issue**: MIORAI modules were missing from the environment, blocking Moirai forecasting model execution
+
+**Resolution**:
+- Identified missing MIORAI dependencies
+- Installed required MIORAI modules to complete the forecasting model ecosystem
+- Updated environment to support all three forecasting models:
+  - ✅ Chronos (with GPU support)
+  - ✅ TimesFM (with GPU support)
+  - ✅ Moirai (with GPU support and MIORAI modules)
+
+**Impact**:
+- All three forecasting pipelines now fully functional
+- Complete many-model forecasting capability enabled
+- GPU acceleration available across all model types
+
+---
+
 ## Next Steps (Recommendations)
 
 1. **Run the complete pipeline** in order:

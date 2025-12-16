@@ -43,6 +43,13 @@ if not os.path.exists(sample_file):
 with open("cell_data/selected_features.txt", "r") as f:
     features_list = [line.strip() for line in f if line.strip()]
 
+#  4-gpu sharding by feature 
+shard_idx = int(os.environ.get("SHARD_IDX", "0"))
+num_shards = int(os.environ.get("NUM_SHARDS", "1"))
+features_list = [f for i, f in enumerate(features_list) if (i % num_shards) == shard_idx]
+print(f"[Shard] {shard_idx}/{num_shards}: {len(features_list)} features")
+
+
 # ========== 6) Preprocess input data ==========
 df_raw = pd.read_csv(sample_file)
 df_raw['ds'] = pd.to_datetime(df_raw['ds'], infer_datetime_format=True, errors='coerce')
@@ -51,10 +58,14 @@ if df_raw['ds'].isna().any():
     print(f"Warning: {missing} rows of 'ds' could not be parsed and will be dropped.")
     df_raw = df_raw.dropna(subset=['ds'])
 # Subsample 500 unique cells
+MAX_CELLS = int(os.environ.get("MAX_CELLS", "500"))  # set -1 for all
 unique_ids = df_raw["unique_id"].dropna().unique()
-np.random.seed(42)
-selected_ids = np.random.choice(unique_ids, size=500, replace=False)
-df_raw = df_raw[df_raw["unique_id"].isin(selected_ids)]
+if MAX_CELLS != -1 and len(unique_ids) > MAX_CELLS:
+    np.random.seed(42)
+    selected_ids = np.random.choice(unique_ids, size=MAX_CELLS, replace=False)
+    df_raw = df_raw[df_raw["unique_id"].isin(selected_ids)]
+print(f"[data] using {df_raw['unique_id'].nunique()} cells (MAX_CELLS={MAX_CELLS})")
+
 
 # ========== 7) Initialize top models dictionary ==========
 top_models = {}
@@ -77,7 +88,10 @@ for feature in features_list:
     forecaster.results_dir = feature_dir
     print(f"Metrics will save into: {forecaster.results_dir}")
 
+    if torch.cuda.is_available(): torch.cuda.synchronize()
     forecaster.evaluate_models()
+    if torch.cuda.is_available(): torch.cuda.synchronize()
+
     print(f"[time] feature={feature} evaluate_models: {time.time() - t0:.2f}s")
     rmse_list = []
     chronos_list = []
