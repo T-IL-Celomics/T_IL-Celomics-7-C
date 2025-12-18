@@ -22,7 +22,7 @@ for cell in fitting_data:
     fitting_dict[key] = cell
 
 # === 3. Define treatments ===
-treatments = ["CON0", "BRCACON1", "BRCACON2", "BRCACON3", "BRCACON4", "BRCACON5"]
+treatments = ["NNIRNOCO", "METRNNIRNOCO", "GABYNNIRNOCO", "NNIRMETRGABYNOCO"]
 
 # === 4. Get feature names
 all_features = [k for k in embedding_data[0].keys() if k not in ["Experiment", "Parent"]]

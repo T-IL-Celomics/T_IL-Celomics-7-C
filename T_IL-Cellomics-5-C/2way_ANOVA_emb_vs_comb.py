@@ -6,10 +6,12 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import os
+# Ensure output directory exists
+os.makedirs("clustering/Embedding - K=3", exist_ok=True)
 # ========== PARAMETERS ==========
-base_dir = "Embedding - K=3"
-embed_csv = os.path.join(base_dir, "Merged_Clusters_PCA.csv")
+base_dir = "clustering/Embedding - K=3"
+embed_csv = os.path.join("clustering", "Merged_Clusters_PCA.csv")
 combined_csv = os.path.join(base_dir, "embedding_fitting_Merged_Clusters_PCA.csv")
 
 embed_out = os.path.join(base_dir, "embedding_means_per_cell.xlsx")

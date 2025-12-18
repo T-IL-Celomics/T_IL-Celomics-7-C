@@ -320,6 +320,47 @@ All three files now:
 
 ---
 
+## Embedding GPU Optimization (December 18, 2025)
+
+### Embedding.py → Embedding_multi_gpu.py
+
+**Changes Made**:
+1. **Multi-GPU Process Pool Support**:
+   - Added `multiprocessing` and `argparse` for distributed processing
+   - Implemented GPU device detection and assignment per worker
+   - Added `--num_gpus` command-line argument for controlling parallelization level
+
+2. **GPU Device Management**:
+   - Added `get_model_device()` function to dynamically detect model GPU placement
+   - Proper tensor device handling with `context_1d.to(device)`
+   - Automatic device-map optimization via `device_map="auto"`
+
+3. **Model Normalization**:
+   - Added `normalize_model_name()` to handle Chronos Bolt model variants
+   - Maps Chronos Bolt models to equivalent T5 models for compatibility
+   - Ensures consistent model loading across different naming conventions
+
+4. **Embedding Computation**:
+   - Enhanced `embed_feature()` to properly handle device placement
+   - Direct access to underlying HuggingFace model via `model.model`
+   - Improved tensor management for GPU-accelerated embedding
+
+5. **Worker Pool Distribution**:
+   - Features distributed across available GPUs
+   - Each worker assigned dedicated GPU via `torch.cuda.set_device(gpu_id)`
+   - Automatic result aggregation from parallel processes
+
+**Files**:
+- Original: `Embedding.py` (single GPU, sequential)
+- GPU-Optimized: `Embedding_multi_gpu.py` (multi-GPU, parallel)
+
+**Impact**:
+- Process all cells in parallel across multiple GPUs
+- Embedding generation scales with number of available GPUs
+- Reduced total runtime from hours to minutes
+
+---
+
 ## Next Steps (Recommendations)
 
 1. **Run the complete pipeline** in order:

@@ -3,7 +3,7 @@ import numpy as np
 from scipy.stats import f_oneway
 
 # === 1. Load your data ===
-df = pd.read_csv("Merged_Clusters_PCA.csv")
+df = pd.read_csv("clustering/Merged_Clusters_PCA.csv")
 
 # === 2. Average per unique cell ===
 df_unique = df.groupby(['Experiment', 'Parent', 'Cluster']).mean(numeric_only=True).reset_index()
@@ -64,6 +64,6 @@ def highlight_pval(val):
 styled = anova_df.style.applymap(highlight_pval, subset=[('Between Groups', 'p-value')])
 
 # === 8. Save to Excel ===
-styled.to_excel('ANOVA - OneWay.xlsx', engine='openpyxl')
+styled.to_excel('clustering/ANOVA - OneWay.xlsx', engine='openpyxl')
 
-print("✅ Saved 'ANOVA - OneWay.xlsx' with multi-level headers and p-value highlighting!")
+print("✅ Saved 'clustering/ANOVA - OneWay.xlsx' with multi-level headers and p-value highlighting!")

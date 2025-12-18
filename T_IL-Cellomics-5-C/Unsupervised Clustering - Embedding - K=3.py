@@ -5,36 +5,46 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
+import os
+# Ensure output directory exists
+os.makedirs("clustering", exist_ok=True)
 
 # === 1. Load original experiment data ===
-df_data = pd.read_csv("../MergedAndFilteredExperiment008.csv")
+df_data = pd.read_excel("cell_data/summary_table.xlsx")
 
 # === 2. Load embedding JSON ===
-with open("../Embedding008.json", "r") as f:
+with open("embeddings/summary_table_Embedding.json", "r") as f:
     data = json.load(f)
 
 # === 3. Define treatment labels ===
-treatments = ["CON0", "BRCACON1", "BRCACON2", "BRCACON3", "BRCACON4", "BRCACON5"]
+treatments = ["NNIRNOCO", "METRNNIRNOCO", "GABYNNIRNOCO", "NNIRMETRGABYNOCO"]
 
-# === 4. Parse embedding data ===
+# === 4. Prepare embedding records ===
+excluded = {"Experiment", "Parent"}
+feat_keys = [k for k in data[0].keys() if k not in excluded]
+feat_keys = [k for k in feat_keys if k != "Unnamed: 0"]  # optional cleanup
+
 records = []
 for cell in data:
     embedding_vector = []
-    for feature, value in cell.items():
-        if feature in ["Experiment", "Parent"]:
-            continue
-        embedding_vector.extend(value if isinstance(value, list) else [value])
-    if not any(np.isnan(embedding_vector)):
+    for k in feat_keys:
+        v = cell.get(k, [np.nan])
+        embedding_vector.extend(v if isinstance(v, list) else [v])
+
+    vec = np.array(embedding_vector, dtype=np.float32)
+    if np.isfinite(vec).all():
         treatment = next((t for t in treatments if t in cell["Experiment"]), "Unknown")
         records.append({
             "Experiment": str(cell["Experiment"]),
             "Parent": str(cell["Parent"]),
-            "embedding": embedding_vector,
+            "embedding": vec,
             "Treatment": treatment
         })
 
-# === 5. Create embedding matrix ===
-X = np.array([r["embedding"] for r in records])
+# === 5. Stack embeddings into matrix ===
+X = np.stack([r["embedding"] for r in records], axis=0)
+print("X shape:", X.shape, "num cells:", len(records))
+
 
 # === 6. Apply scaling ===
 scaler = StandardScaler()
@@ -59,7 +69,7 @@ pca_df["Treatment"] = [r["Treatment"] for r in records]
 pca_df["Cluster"] = final_labels
 
 # === 10. Save cluster assignments ===
-pca_df.to_csv("cluster_assignments_k3.csv", index=False)
+pca_df.to_csv("clustering/cluster_assignments_k3.csv", index=False)
 print("Saved cluster_assignments_k3.csv")
 
 # === 11. Plot full PCA with clusters ===
@@ -74,7 +84,7 @@ plt.ylabel(f"PC2 ({explained_var[1]:.1f}%)")
 plt.title(f"PCA with KMeans Clusters (k={best_k})")
 plt.legend()
 plt.tight_layout()
-plt.savefig("pca_kmeans_k3_clusters.png")
+plt.savefig("clustering/pca_kmeans_k3_clusters.png")
 plt.show()
 
 # === 12. Plot by treatment ===
@@ -95,7 +105,7 @@ for i, treatment in enumerate(treatments):
 fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", bbox_to_anchor=(1.1, 1.0))
 plt.suptitle("PCA Clustering by Treatment (k=3)", fontsize=16)
 plt.tight_layout(rect=[0, 0, 1, 0.95])
-plt.savefig("pca_kmeans_k3_by_treatment.png")
+plt.savefig("clustering/pca_kmeans_k3_by_treatment.png")
 plt.show()
 
 # === 13. Merge with original full data ===
@@ -113,5 +123,5 @@ merged_df = pd.merge(
 )
 
 # === 14. Save merged file ===
-merged_df.to_csv("Merged_Clusters_PCA.csv", index=False)
+merged_df.to_csv("clustering/Merged_Clusters_PCA.csv", index=False)
 print("Saved as Merged_Clusters_PCA.csv")

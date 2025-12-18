@@ -1,17 +1,21 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+
+# Ensure output directory exists
+os.makedirs("dose_dependancy", exist_ok=True)
 
 # ================== CONFIG ==================
 # if your clustering file has a different name (e.g.
 # "embedding_fitting_Merged_Clusters_PCA.csv"), change this:
-CLUSTER_FILE = "Merged_Clusters_PCA.csv"
+CLUSTER_FILE = "clustering/Merged_Clusters_PCA.csv"
 
-DOSE_FILE    = "dose_dependency_summary_all_wells.csv"
+DOSE_FILE    = "cell_data/dose_dependency_summary_all_wells.csv"
 
-OUT_MERGED_CELLS   = "cells_with_clusters_and_dose.csv"
-OUT_CONTINGENCY    = "cluster_vs_dose_counts.csv"
-OUT_HEATMAP_PNG    = "cluster_vs_dose_heatmap.png"
-OUT_PCA_PLOT_PNG   = "pca_clusters_basic.png"
+OUT_MERGED_CELLS   = "dose_dependancy/cells_with_clusters_and_dose.csv"
+OUT_CONTINGENCY    = "dose_dependancy/cluster_vs_dose_counts.csv"
+OUT_HEATMAP_PNG    = "dose_dependancy/cluster_vs_dose_heatmap.png"
+OUT_PCA_PLOT_PNG   = "dose_dependancy/pca_clusters_basic.png"
 # ============================================
 
 

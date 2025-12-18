@@ -1,7 +1,7 @@
 import pandas as pd
 
 # === 1. Load merged data ===
-df = pd.read_csv("Merged_Clusters_PCA.csv")
+df = pd.read_csv("clustering/Merged_Clusters_PCA.csv")
 
 # === 2. Columns to exclude ===
 exclude_cols = [
@@ -46,5 +46,5 @@ summary_df = pd.DataFrame(summary_list)
 print(summary_df.head())
 
 # === 7. Save ===
-summary_df.to_excel("Descriptive_Table_By_Cluster_UniqueCells.xlsx", index=False)
-print("Saved: Descriptive_Table_By_Cluster_UniqueCells.xlsx")
+summary_df.to_excel("clustering/Descriptive_Table_By_Cluster_UniqueCells.xlsx", index=False)
+print("Saved: clustering/Descriptive_Table_By_Cluster_UniqueCells.xlsx")

@@ -143,9 +143,10 @@ def run_embedding_pipeline(df, model_dict_path, output_path, dim=3):
     print(f"Total runtime: {duration / 60:.2f} minutes")
 
 # Example usage:
-df = pd.read_csv("MergedAndFilteredExperiment008.csv")
+df = pd.read_excel("cell_data/summary_table.xlsx")
+df.to_csv("cell_data/summary_table.csv", index=False)
 run_embedding_pipeline(
     df=df,
-    model_dict_path="best_chronos_model_per_feature.json",
-    output_path="Embedding008.json")
+    model_dict_path="best_model_per_feature_jeries_4GPU.json",
+    output_path="embeddings/summary_table_Embedding.json")
 

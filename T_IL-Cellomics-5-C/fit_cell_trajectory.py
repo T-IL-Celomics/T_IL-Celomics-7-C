@@ -15,6 +15,9 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import seaborn as sns
 import warnings
 
+os.makedirs("regression", exist_ok=True)
+os.makedirs("figures", exist_ok=True)
+
 warnings.filterwarnings("ignore")
 
 # ========== STEP 1: Define Models ==========
@@ -61,11 +64,11 @@ def fit_model(model_func, xdata, ydata, p0):
 
 # ========== STEP 2: Fit & Save CSVs ==========
 csv_exist = (
-    os.path.exists("fitting_all_models.csv")
+    os.path.exists("cell_data/fitting_all_models.csv")
 )
 
 if not csv_exist:
-    df = pd.read_csv("raw_all_cells.csv")
+    df = pd.read_csv("cell_data/raw_all_cells.csv")
     df["Experiment"] = df["Experiment"].astype(str)
     df["Parent"]     = df["Parent"].astype(str)
 
@@ -96,18 +99,17 @@ if not csv_exist:
                 all_models.append(row)
 
     df_all = pd.DataFrame(all_models)
-    df_all.to_csv("fitting_all_models.csv", index=False)
-    print("fitting_all_models.csv saved.")
+    df_all.to_csv("regression/fitting_all_models.csv", index=False)
+    print("regression/fitting_all_models.csv saved.")
 else:
-    print("Loading existing fitting_all_models.csv")
-    df_all = pd.read_csv("fitting_all_models.csv")
-
+    print("Loading existing regression/fitting_all_models.csv")
+    df_all = pd.read_csv("regression/fitting_all_models.csv")
 # ========== STEP 3: Select Top Models & Compute NRMSE on df_top3 ==========
 # 1) significant fits
 df_sig = df_all[df_all["pval"] < 0.05].copy()
 
 # === NEW: compute range for NRMSE on df_sig ===
-raw = pd.read_csv("raw_all_cells.csv")
+raw = pd.read_csv("cell_data/raw_all_cells.csv")
 raw["Experiment"] = raw["Experiment"].astype(str)
 raw["Parent"]     = raw["Parent"].astype(str)
 exclude = {"TimeIndex", "Parent", "Experiment", "unique_id", "ds"}
@@ -147,7 +149,7 @@ df_sig = df_sig.merge(
 df_sig["NRMSE"] = df_sig["RMSE"] / df_sig["range"]
 
 # save updated df_sig with NRMSE
-df_sig.to_csv("fitting_significant_models_with_nrmse.csv", index=False)
+df_sig.to_csv("regression/fitting_significant_models_with_nrmse.csv", index=False)
 
 # 2) pick Top‐3 by NRMSE
 df_top3 = (
@@ -168,9 +170,9 @@ df_top1 = (
 )
 
 # 4) save outputs
-df_top3.to_csv("fitting_top3_with_nrmse.csv", index=False)
-df_top1.to_csv("fitting_best_with_nrmse.csv",  index=False)
-print("Saved: fitting_top3_with_nrmse.csv and fitting_best_with_nrmse.csv (based on NRMSE)")
+df_top3.to_csv("regression/fitting_top3_with_nrmse.csv", index=False)
+df_top1.to_csv("regression/fitting_best_with_nrmse.csv",  index=False)
+print("Saved: regression/fitting_top3_with_nrmse.csv and regression/fitting_best_with_nrmse.csv (based on NRMSE)")
 
 # ========== STEP 4: Visualizations ==========
 # Ensure output directory exists
