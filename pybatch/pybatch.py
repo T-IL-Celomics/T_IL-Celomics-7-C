@@ -267,7 +267,7 @@ OLD_FIELDS = ["Area", "Acceleration", "Coll", "Confinement_Ratio", "Directional_
               "Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Ending_Value", "Velocity_Ending_Time",
               "Velocity_Starting_Value", "Velocity_Starting_Time", "TimeIndex", "x_Pos", "y_Pos", "Parent", "dt", "ID", "Experiment"]
 
-LOG_PATH = r"\\metlab25\d\pybatch\logs"
+LOG_PATH = r"\\metlab24\d\jeries\pybatch\logs"
 
 PLATE_LETTERS = ["B", "C", "D", "E", "F", "G"]
 PLATE_NUMBERS = range(2, 12)

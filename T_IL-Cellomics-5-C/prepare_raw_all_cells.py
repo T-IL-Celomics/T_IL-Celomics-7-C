@@ -39,16 +39,14 @@ print("removed constant features:", removed_const)
 # 6) fill NaNs per cell track (grouped by unique_id)
 def fill_group(g: pd.DataFrame) -> pd.DataFrame:
     # interpolate along time within each cell
-    g[keep_feature_cols] = g[keep_feature_cols].interpolate(
-        limit_direction="both"
-    )
+    g[keep_feature_cols] = g[keep_feature_cols].interpolate(limit_direction="both")
+
     # then forward/backward fill remaining holes if any
-    g[keep_feature_cols] = (
-        g[keep_feature_cols]
-        .fillna(method="ffill")
-        .fillna(method="bfill")
-    )
+    g[keep_feature_cols] = g[keep_feature_cols].ffill().bfill()
+
     return g
+
+
 
 df = df.groupby("unique_id", group_keys=False).apply(fill_group)
 

@@ -230,6 +230,64 @@ class Batch_Experiment(object):
         else:
             return False
 
+    DOSE_ORDER = {"NEG": 0, "POS": 1, "HIGH": 2}
+
+    def _infer_dose_by_channel_from_df(self, well_df):
+        """
+        returns dict like {"ch1":"POS", "ch2":"NEG"} based on mode over time.
+        if a channel column doesn't exist, it's ignored.
+        """
+        dose_by_ch = {}
+        for ch in [1, 2, 3]:
+            col = f"Cha{ch}_Category"
+            if col not in well_df.columns:
+                continue
+            s = well_df[col].dropna().astype(str).str.upper()
+            s = s[s.isin(["NEG", "POS", "HIGH"])]
+            if len(s) == 0:
+                continue
+            dose_by_ch[f"ch{ch}"] = s.value_counts().idxmax()
+        return dose_by_ch
+
+    def _dose_combo_str(self, dose_by_channel):
+        """
+        stable label for grouping/plot legends
+        """
+        if not dose_by_channel:
+            return "NO_CHANNEL_INFO"
+        parts = [f"{k}={dose_by_channel[k]}" for k in sorted(dose_by_channel.keys())]
+        return "__".join(parts)
+
+    def _treatment_chunks_from_short(self, well):
+        """
+        short looks like: B02NNIRNOCO...
+        returns ['NNIR','NOCO'] (4-letter chunks after the 3-char location)
+        """
+        s = self.shortened_well_names.get(well, "")
+        if len(s) < 3:
+            return [s] if s else []
+        tail = s[3:]  # remove 'B02'
+        # split into 4-letter chunks
+        chunks = [tail[i:i+4] for i in range(0, len(tail), 4) if len(tail[i:i+4]) == 4]
+        return chunks
+
+    def _treatment_key(self, well):
+        """
+        stable treatment key used on x-axis.
+        e.g. ['NNIR','NOCO'] -> 'NNIR+NOCO'
+        """
+        chunks = self._treatment_chunks_from_short(well)
+        return "+".join(chunks) if chunks else self.shortened_well_names.get(well, str(well))
+    
+    def _dose_level_ch1(self, well_df):
+        if "Cha1_Category" not in well_df.columns:
+            return "NO_CH1"
+        s = well_df["Cha1_Category"].dropna().astype(str).str.upper()
+        s = s[s.isin(["NEG", "POS", "HIGH"])]
+        return s.value_counts().idxmax() if len(s) else "NO_CH1"
+
+
+
     def _min_max(self, attribute, min_val=None, max_val=None, multiplier=1, log=False, absolute=False, average=False, scaled=True):
         parameter = attribute
         if log: # no longer in use
@@ -1146,6 +1204,91 @@ class Batch_Experiment(object):
         self.pdf.image(os.path.join(output_folder, "barplot.jpg"), x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1],
                        w=TWO_GRAPH_WIDTH)
 
+
+    def make_dose_effect_pages(self, parameters_to_plot=None):
+        modes = [("combo", "Dose Effect (All Channels)")]
+
+        if parameters_to_plot is None:
+            parameters_to_plot = [p for p in getattr(self, "parameters", [])
+                                if p in PARAM_GRAPHS and "average" in PARAM_GRAPHS[p]]
+
+        for mode, title in modes:
+            out_dir = os.path.join(self.output_path, title)
+            os.makedirs(out_dir, exist_ok=True)
+
+            meta_rows = []
+            for well in self.wells:
+                well_df = self.well_info[well]
+
+                if mode == "ch1":
+                    combo = self._dose_level_ch1(well_df)   # NEG/POS/HIGH
+                else:
+                    dose_by_ch = self._infer_dose_by_channel_from_df(well_df)
+                    combo = self._dose_combo_str(dose_by_ch)
+
+                treatment = self._treatment_key(well)
+                meta_rows.append((well, treatment, combo))
+
+            for param in parameters_to_plot:
+                vals = []
+                for well, treatment, combo in meta_rows:
+                    df = self.well_info[well]
+                    if param not in df.columns:
+                        continue
+                    s = pd.to_numeric(df[param], errors="coerce").dropna()
+                    if len(s) == 0:
+                        continue
+                    vals.append({"treatment": treatment, "combo": combo, "value": float(s.mean())})
+
+                if not vals:
+                    continue
+
+                dfp = pd.DataFrame(vals)
+                agg = dfp.groupby(["treatment", "combo"])["value"].agg(["mean", "count", "std"]).reset_index()
+                agg["sem"] = agg["std"] / np.sqrt(agg["count"].clip(lower=1))
+
+                treatments = sorted(agg["treatment"].unique().tolist())
+                if mode == "ch1":
+                    combos = sorted(agg["combo"].unique().tolist(),
+                                    key=lambda c: self.DOSE_ORDER.get(c.replace("*",""), 99))
+                else:
+                    combos = sorted(agg["combo"].unique().tolist())
+
+                fig, ax = plt.subplots(figsize=(14, 6))
+                x = np.arange(len(treatments))
+                width = 0.8 / max(1, len(combos))
+
+                for i, combo in enumerate(combos):
+                    a = agg[agg["combo"] == combo]
+                    y = []
+                    yerr = []
+                    for t in treatments:
+                        r = a[a["treatment"] == t]
+                        if len(r) == 0:
+                            y.append(np.nan); yerr.append(0.0)
+                        else:
+                            y.append(float(r["mean"].iloc[0]))
+                            yerr.append(float(r["sem"].iloc[0]) if not np.isnan(r["sem"].iloc[0]) else 0.0)
+
+                    ax.bar(x + i * width, y, width, label=combo)
+                    ax.errorbar(x + i * width, y, yerr=yerr, fmt="none", capsize=3)
+
+                ax.set_xticks(x + (len(combos) - 1) * width / 2)
+                ax.set_xticklabels(treatments, rotation=30, ha="right")
+                ax.set_title(f"{param} – {title}")
+                ax.set_ylabel(param + UNIT_DICT.get(param, ""))
+                ax.legend(fontsize=8)
+
+                fig.tight_layout()
+                out_img = os.path.join(out_dir, f"{param}_dose_effect.jpg")
+                fig.savefig(out_img, dpi=200)
+                plt.close(fig)
+
+                self.new_page(f"{param} – {title}")
+                self.pdf.image(out_img, x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
+
+
+
     def draw_layer_graph(self, well, parameter, output_folder=None, intervals=15, absolute=False, groups=False,
                          fixed_distance=30, scaled=False):
         fig, graph_ax = plt.subplots()
@@ -1619,9 +1762,32 @@ class Batch_Experiment(object):
         scaler = StandardScaler(with_std=True)
         avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns, index=[self.shortened_well_names[w] for w in avg_df.index])
         linkaged_pca = linkage(avg_df, "ward")
-        s = sns.clustermap(data=avg_df, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
-                           vmin=-2, vmax=2, figsize=(30, 15),
-                           cbar_kws = dict(use_gridspec=False))
+        # build row_colors based on inferred combos
+        row_labels = list(avg_df.index)  # current row labels
+
+        short_to_full = {self.shortened_well_names[w]: w for w in self.wells if w in self.shortened_well_names}
+        combos = []
+        for short in row_labels:
+            full = short_to_full.get(short, None)
+            if full is None:
+                combos.append("NO_META")
+                continue
+            d = self._infer_dose_by_channel_from_df(self.well_info[full])
+            combos.append(self._dose_combo_str(d))
+
+        combo_cat = pd.Series(combos, index=row_labels).astype("category")
+        combo_colors = dict(zip(combo_cat.cat.categories, sns.color_palette("Set3", len(combo_cat.cat.categories))))
+        row_colors = pd.DataFrame({"dose_combo": combo_cat.map(combo_colors)}, index=row_labels)
+
+        s = sns.clustermap(
+                            data=avg_df,
+                            row_linkage=linkaged_pca,
+                            row_colors=row_colors,
+                            cmap=sns.color_palette("coolwarm", n_colors=256),
+                            vmin=-2, vmax=2, figsize=(30, 15),
+                            cbar_kws=dict(use_gridspec=False),
+                        )
+
         #s.ax_heatmap.set_xlabel("Parameters", fontsize=25, fontweight='bold')
         #s.ax_heatmap.set_ylabel("Well", fontsize=25, fontweight='bold')
         #s.cax.set_yticklabels(s.cax.get_yticklabels());
@@ -1729,6 +1895,8 @@ class Batch_Experiment(object):
                     absolute = False
                 if "average" in param_pair_graphs[parameter_pair]:
                     self.make_param_vs_param_page(parameter1, parameter2, average=True, absolute=absolute)
+        print("\tMaking dose effect pages...")
+        self.make_dose_effect_pages()
         print("\tMaking last pages...")
         self.make_wave_pages()
         self.make_displacement_page()
@@ -1737,7 +1905,9 @@ class Batch_Experiment(object):
         self.make_MSD_pages()
         print("\tMaking cluster page...")
         self.make_cluster_page()
+        
         print("\tFinal steps...")
+
         self.pdf.output(os.path.join(output_path, self.exp_name + "_report.pdf"))
         #self.dump_dicts(output_path)
 

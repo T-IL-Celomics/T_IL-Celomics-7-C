@@ -2,16 +2,15 @@ import pandas as pd
 import numpy as np
 
 # ---------- CONFIG ----------
-out_dir = "/content/drive/MyDrive/final_project/T_IL-Cellomics-5-C/cell_data"
-INPUT_EXCEL = f"{out_dir}/summary_table.xlsx"   # pybatch xlsx
-OUTPUT_CSV  = f"{out_dir}/raw_all_cells.csv"    # file used by the pipeline
+INPUT_EXCEL = f"cell_data/summary_table.csv"   # pybatch xlsx
+OUTPUT_CSV  = f"cell_data/raw_all_cells.csv"    # file used by the pipeline
 
 MIN_FRAMES_PER_CELL = 25
 MAX_GAP             = 5   # max allowed gap in TimeIndex
 # ----------------------------
 
 print("loading pybatch table ...")
-df = pd.read_excel(INPUT_EXCEL)
+df = pd.read_csv(INPUT_EXCEL)
 
 # drop old index columns like "Unnamed: 0"
 df = df.loc[:, ~df.columns.str.startswith("Unnamed")]

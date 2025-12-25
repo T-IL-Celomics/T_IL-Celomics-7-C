@@ -64,7 +64,7 @@ def fit_model(model_func, xdata, ydata, p0):
 
 # ========== STEP 2: Fit & Save CSVs ==========
 csv_exist = (
-    os.path.exists("cell_data/fitting_all_models.csv")
+    os.path.exists("regression/fitting_all_models.csv")
 )
 
 if not csv_exist:
