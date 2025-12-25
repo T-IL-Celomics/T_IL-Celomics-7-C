@@ -1275,7 +1275,7 @@ class Batch_Experiment(object):
 
                 ax.set_xticks(x + (len(combos) - 1) * width / 2)
                 ax.set_xticklabels(treatments, rotation=30, ha="right")
-                ax.set_title(f"{param} – {title}")
+                ax.set_title(f"{param} - {title}")
                 ax.set_ylabel(param + UNIT_DICT.get(param, ""))
                 ax.legend(fontsize=8)
 
@@ -1284,7 +1284,7 @@ class Batch_Experiment(object):
                 fig.savefig(out_img, dpi=200)
                 plt.close(fig)
 
-                self.new_page(f"{param} – {title}")
+                self.new_page(f"{param} - {title}")
                 self.pdf.image(out_img, x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
 
 
@@ -1777,7 +1777,14 @@ class Batch_Experiment(object):
 
         combo_cat = pd.Series(combos, index=row_labels).astype("category")
         combo_colors = dict(zip(combo_cat.cat.categories, sns.color_palette("Set3", len(combo_cat.cat.categories))))
-        row_colors = pd.DataFrame({"dose_combo": combo_cat.map(combo_colors)}, index=row_labels)
+        # --- fix: avoid MultiIndex categories in pandas map ---
+        combo_cat_str = pd.Series(combo_cat, index=row_labels).astype(str)
+        combo_colors_str = {str(k): v for k, v in combo_colors.items()}
+
+        row_colors = pd.DataFrame(
+            {"dose_combo": combo_cat_str.map(combo_colors_str)},
+            index=row_labels
+        )
 
         s = sns.clustermap(
                             data=avg_df,

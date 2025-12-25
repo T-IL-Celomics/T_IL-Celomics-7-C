@@ -103,7 +103,7 @@ for feature in features_list:
         if not dfm.empty:
             avg_rmse = dfm["score"].mean()
             rmse_list.append((model_name, avg_rmse))
-            if "chronos" in model_name.lower():
+            if "chronost5" in model_name.lower():
                 chronos_list.append((model_name, avg_rmse))
 
     if not rmse_list:

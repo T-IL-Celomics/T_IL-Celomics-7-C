@@ -439,7 +439,7 @@ for best_k in best_k_values:
     if dose_data is not None:
         # Check if DoseLabel already exists, if not merge it
         if "DoseLabel" not in df.columns:
-            df = df.merge(dose_data_desc[["Experiment", "Parent", "DoseLabel"]], 
+            df = df.merge(dose_data[["Experiment", "Parent", "DoseLabel"]], 
                           on=["Experiment", "Parent"], how="left")
         
         # Per-treatment dose analysis
