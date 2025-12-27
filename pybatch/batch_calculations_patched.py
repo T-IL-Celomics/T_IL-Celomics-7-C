@@ -1870,6 +1870,108 @@ class Batch_Experiment(object):
             plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
             plt.show()
 
+    def draw_cluster_analysis_by_treatment_dose(self, output_folder=None):
+        """
+        Hierarchical clustering colored by treatment + dose_category_combo
+        Shows dose effects (combos) within each treatment via clustering
+        """
+        # Build meta data with treatment + dose_combo
+        meta_rows = []
+        for well in self.well_list:
+            treatment = self._treatment_key(well)
+            combo = self._dose_combo_str(well)
+            # Combined label: treatment + dose_combo
+            treatment_dose = f"{treatment}_{combo}"
+            meta_rows.append({"well": well, "treatment": treatment, "combo": combo, "treatment_dose": treatment_dose})
+        
+        meta_df = pd.DataFrame(meta_rows)
+        
+        # Prepare clustering data (same as original)
+        avg_df = pd.DataFrame(
+            index=self.well_list,
+            columns=list(set(CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS))
+        )
+        
+        for well in self.well_list:
+            well_df = self.well_data[well]
+            cells = well_df.Parent.unique()
+            well_df = well_df.set_index("Parent")
+            for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
+                if parameter in self.parameters and parameter in well_df.columns:
+                    values = np.array([0.0] * len(cells))
+                    for i in range(len(cells)):
+                        try:
+                            values[i] = well_df.loc[cells[i], parameter].iloc[0]
+                        except AttributeError:
+                            values[i] = well_df.loc[cells[i], parameter]
+                    if parameter in CLUSTER_WAVE_FIELDS:
+                        values = values[values.nonzero()]
+                    values = pd.Index(values).dropna()
+                    avg_df.loc[well, parameter] = np.average(values)
+        
+        # Standardize
+        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
+        avg_df = avg_df.replace([np.inf, -np.inf], np.nan)
+        avg_df = avg_df.dropna(axis=1, how='any')
+        avg_df = avg_df.dropna(axis=0, how='any')
+        
+        if avg_df.shape[0] < 2 or avg_df.shape[1] < 2:
+            print("Not enough data for treatment+dose clustering")
+            return
+        
+        scaler = StandardScaler(with_std=True)
+        avg_df = pd.DataFrame(
+            scaler.fit_transform(avg_df),
+            columns=avg_df.columns,
+            index=[self.shortened_well_names[w] for w in avg_df.index]
+        )
+        
+        # Hierarchical clustering
+        linkaged_pca = linkage(avg_df, "ward")
+        row_labels = list(avg_df.index)
+        
+        # Map shortened names back to treatment_dose labels
+        short_to_full = {self.shortened_well_names[w]: w for w in self.wells if w in self.shortened_well_names}
+        treatment_dose_labels = []
+        for short in row_labels:
+            full = short_to_full.get(short, None)
+            # Find corresponding row in meta_df
+            idx = meta_df[meta_df['well'] == full].index
+            if len(idx) > 0:
+                treatment_dose_labels.append(meta_df.loc[idx[0], 'treatment_dose'])
+            else:
+                treatment_dose_labels.append("NO_META")
+        
+        # Color by treatment_dose combination
+        td_cat = pd.Series(treatment_dose_labels, index=row_labels).astype("category")
+        td_colors = dict(zip(td_cat.cat.categories, sns.color_palette("husl", len(td_cat.cat.categories))))
+        td_cat_str = pd.Series(td_cat, index=row_labels).astype(str)
+        td_colors_str = {str(k): v for k, v in td_colors.items()}
+        
+        row_colors = pd.DataFrame(
+            {"treatment_dose": td_cat_str.map(td_colors_str)},
+            index=row_labels
+        )
+        
+        # Create clustermap
+        s = sns.clustermap(
+            data=avg_df,
+            row_linkage=linkaged_pca,
+            row_colors=row_colors,
+            cmap=sns.color_palette("coolwarm", n_colors=256),
+            vmin=-2, vmax=2, figsize=(30, 15),
+            cbar_kws=dict(use_gridspec=False),
+        )
+        
+        s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
+        
+        if output_folder:
+            plt.savefig(os.path.join(output_folder, "clustermap_treatment_dose.jpg"))
+            plt.close()
+        else:
+            plt.suptitle("%d - Cluster analysis (by Treatment + Dose)" % self.pdf.page_no(), fontweight='bold', fontsize=30)
+            plt.show()
+
     def make_cluster_page(self):
         title = "Cluster Analysis"
         output_folder = os.path.join(self.output_path, title)
@@ -1878,9 +1980,17 @@ class Batch_Experiment(object):
         except FileExistsError:
             pass
         self.new_page(title)
+        
+        # Original clustering (by dose combo alone)
         if not os.path.exists(os.path.join(output_folder, "clustermap.jpg")):
             self.draw_cluster_analysis(output_folder=output_folder)
         self.pdf.image(os.path.join(output_folder, "clustermap.jpg"), x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
+        
+        # New page for treatment + dose clustering
+        self.new_page("Cluster Analysis - by Treatment + Dose")
+        if not os.path.exists(os.path.join(output_folder, "clustermap_treatment_dose.jpg")):
+            self.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder)
+        self.pdf.image(os.path.join(output_folder, "clustermap_treatment_dose.jpg"), x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
 
     def load_dicts(self, output_path):
         try:

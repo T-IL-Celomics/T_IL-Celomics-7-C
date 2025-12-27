@@ -12,7 +12,7 @@ import math
 os.makedirs("clustering", exist_ok=True)
 
 # === 1. Load original experiment data ===
-df_data = pd.read_csv("cell_data/summary_table_filled_no_extrap_FINAL_NO_NAN.csv")
+df_data = pd.read_csv("cell_data/MergedAndFilteredExperiment008.csv")
 
 # === 1b. Load dose information ===
 try:
@@ -40,7 +40,8 @@ with open("embeddings/summary_table_Embedding.json", "r") as f:
     data = json.load(f)
 
 # === 3. Define treatment labels ===
-treatments = ["NNIRNOCO", "METRNNIRNOCO", "GABYNNIRNOCO", "NNIRMETRGABYNOCO"]
+#treatments = ["NNIRNOCO", "METRNNIRNOCO", "GABYNNIRNOCO", "NNIRMETRGABYNOCO"]
+treatments = ["CON0", "BRCACON1", "BRCACON2", "BRCACON3", "BRCACON4", "BRCACON5"]
 
 # === 4. Prepare embedding records ===
 excluded = {"Experiment", "Parent"}
@@ -118,7 +119,7 @@ for best_k in best_k_values:
     final_labels = kmeans_final.fit_predict(X_scaled)
 
     print("Silhouette score per treatment:")
-    for treatment in pd.unique([r["Treatment"] for r in records]):
+    for treatment in np.unique([r["Treatment"] for r in records]):
         idx = np.array([r["Treatment"] == treatment for r in records])
 
         # need at least k+1 samples to compute silhouette
@@ -170,44 +171,45 @@ for best_k in best_k_values:
     treatments_present = [t for t in treatments if (pca_df["Treatment"] == t).any()]
     n_t = len(treatments_present)
 
-    # pick a "nice" grid: ~square
-    ncols = math.ceil(math.sqrt(n_t))
-    nrows = math.ceil(n_t / ncols)
+    if n_t > 0:
+        # pick a "nice" grid: ~square
+        ncols = math.ceil(math.sqrt(n_t))
+        nrows = math.ceil(n_t / ncols)
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(6*ncols, 5*nrows), sharex=True, sharey=True)
-    axes = np.array(axes).reshape(-1)  # flatten safely even if 1 subplot
+        fig, axes = plt.subplots(nrows, ncols, figsize=(6*ncols, 5*nrows), sharex=True, sharey=True)
+        axes = np.array(axes).reshape(-1)  # flatten safely even if 1 subplot
 
-    for i, treatment in enumerate(treatments_present):
-        ax = axes[i]
-        subset = pca_df[pca_df["Treatment"] == treatment]
+        for i, treatment in enumerate(treatments_present):
+            ax = axes[i]
+            subset = pca_df[pca_df["Treatment"] == treatment]
 
-        for j in range(best_k):
-            cdata = subset[subset["Cluster"] == j]
-            ax.scatter(
-                cdata["PC1"], cdata["PC2"],
-                color=colors[j],
-                edgecolors="black", linewidths=0.3,
-                s=40, alpha=0.7,
-                label=f"Cluster {j}" if i == 0 else None  # legend once
-            )
+            for j in range(best_k):
+                cdata = subset[subset["Cluster"] == j]
+                ax.scatter(
+                    cdata["PC1"], cdata["PC2"],
+                    color=colors[j],
+                    edgecolors="black", linewidths=0.3,
+                    s=40, alpha=0.7,
+                    label=f"Cluster {j}" if i == 0 else None  # legend once
+                )
 
-        ax.set_title(treatment)
-        ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)")
-        ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)")
-        ax.grid(True)
+            ax.set_title(treatment)
+            ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)")
+            ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)")
+            ax.grid(True)
 
-    # delete unused axes (if grid has extra slots)
-    for j in range(n_t, len(axes)):
-        fig.delaxes(axes[j])
+        # delete unused axes (if grid has extra slots)
+        for j in range(n_t, len(axes)):
+            fig.delaxes(axes[j])
 
-    fig.legend(loc="upper right")
-    plt.suptitle(f"PCA Clustering by Treatment (k={best_k})", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(f"clustering/pca_kmeans_k{best_k}_by_treatment.png")
-    plt.show()
+        fig.legend(loc="upper right")
+        plt.suptitle(f"PCA Clustering by Treatment (k={best_k})", fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.savefig(f"clustering/pca_kmeans_k{best_k}_by_treatment.png")
+        plt.show()
 
     # Plot by dose if available
-    if dose_data is not None and "DoseLabel" in pca_df.columns:
+    if dose_data is not None:
         doses_present = [d for d in pca_df["DoseLabel"].unique() if pd.notna(d) and d != ""]
         
         if len(doses_present) > 0:
@@ -276,67 +278,68 @@ for best_k in best_k_values:
             print(f"Saved cluster_vs_dose_heatmap_k{best_k}.png")
         
         # Per-treatment dose analysis
-        print(f"\n{'='*60}")
-        print(f"Dose analysis per treatment (k={best_k})")
-        print(f"{'='*60}\n")
+        if n_t > 0:
+            print(f"\n{'='*60}")
+            print(f"Dose analysis per treatment (k={best_k})")
+            print(f"{'='*60}\n")
         
-        for treatment in treatments_present:
-            treatment_data = pca_df[pca_df["Treatment"] == treatment].copy()
-            treatment_doses = [d for d in treatment_data["DoseLabel"].unique() if pd.notna(d) and d != ""]
-            
-            if len(treatment_doses) == 0:
-                continue
+            for treatment in treatments_present:
+                treatment_data = pca_df[pca_df["Treatment"] == treatment].copy()
+                treatment_doses = [d for d in treatment_data["DoseLabel"].unique() if pd.notna(d) and d != ""]
                 
-            n_td = len(treatment_doses)
-            ncols_td = math.ceil(math.sqrt(n_td))
-            nrows_td = math.ceil(n_td / ncols_td)
+                if len(treatment_doses) == 0:
+                    continue
+                    
+                n_td = len(treatment_doses)
+                ncols_td = math.ceil(math.sqrt(n_td))
+                nrows_td = math.ceil(n_td / ncols_td)
 
-            fig, axes = plt.subplots(nrows_td, ncols_td, figsize=(6*ncols_td, 5*nrows_td), sharex=True, sharey=True)
-            axes = np.array(axes).reshape(-1)
+                fig, axes = plt.subplots(nrows_td, ncols_td, figsize=(6*ncols_td, 5*nrows_td), sharex=True, sharey=True)
+                axes = np.array(axes).reshape(-1)
 
-            for i, dose in enumerate(treatment_doses):
-                ax = axes[i]
-                subset = treatment_data[treatment_data["DoseLabel"] == dose]
+                for i, dose in enumerate(treatment_doses):
+                    ax = axes[i]
+                    subset = treatment_data[treatment_data["DoseLabel"] == dose]
 
-                for j in range(best_k):
-                    cdata = subset[subset["Cluster"] == j]
-                    ax.scatter(
-                        cdata["PC1"], cdata["PC2"],
-                        color=colors[j],
-                        edgecolors="black", linewidths=0.3,
-                        s=40, alpha=0.7,
-                        label=f"Cluster {j}" if i == 0 else None
+                    for j in range(best_k):
+                        cdata = subset[subset["Cluster"] == j]
+                        ax.scatter(
+                            cdata["PC1"], cdata["PC2"],
+                            color=colors[j],
+                            edgecolors="black", linewidths=0.3,
+                            s=40, alpha=0.7,
+                            label=f"Cluster {j}" if i == 0 else None
+                        )
+
+                    ax.set_title(f"{dose}")
+                    ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)")
+                    ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)")
+                    ax.grid(True)
+
+                # delete unused axes
+                for j in range(n_td, len(axes)):
+                    fig.delaxes(axes[j])
+
+                if n_td > 0:
+                    fig.legend(loc="upper right")
+                    plt.suptitle(f"{treatment} - PCA by Dose (k={best_k})", fontsize=16)
+                    plt.tight_layout(rect=[0, 0, 1, 0.95])
+                    plt.savefig(f"clustering/pca_kmeans_k{best_k}_{treatment}_by_dose.png")
+                    plt.show()
+
+                    # Contingency per treatment
+                    treatment_contingency = treatment_data.pivot_table(
+                        index="DoseLabel",
+                        columns="Cluster",
+                        values="Parent",
+                        aggfunc="nunique",
+                        fill_value=0,
                     )
-
-                ax.set_title(f"{dose}")
-                ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)")
-                ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)")
-                ax.grid(True)
-
-            # delete unused axes
-            for j in range(n_td, len(axes)):
-                fig.delaxes(axes[j])
-
-            if n_td > 0:
-                fig.legend(loc="upper right")
-                plt.suptitle(f"{treatment} - PCA by Dose (k={best_k})", fontsize=16)
-                plt.tight_layout(rect=[0, 0, 1, 0.95])
-                plt.savefig(f"clustering/pca_kmeans_k{best_k}_{treatment}_by_dose.png")
-                plt.show()
-
-                # Contingency per treatment
-                treatment_contingency = treatment_data.pivot_table(
-                    index="DoseLabel",
-                    columns="Cluster",
-                    values="Parent",
-                    aggfunc="nunique",
-                    fill_value=0,
-                )
-                
-                treatment_contingency.to_csv(f"clustering/cluster_vs_dose_k{best_k}_{treatment}.csv")
-                print(f"{treatment} - Cluster vs Dose counts:")
-                print(treatment_contingency)
-                print()
+                    
+                    treatment_contingency.to_csv(f"clustering/cluster_vs_dose_k{best_k}_{treatment}.csv")
+                    print(f"{treatment} - Cluster vs Dose counts:")
+                    print(treatment_contingency)
+                    print()
 
     # Merge with original full data
     # Convert merge keys to string for safety

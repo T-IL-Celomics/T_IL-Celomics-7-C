@@ -58,8 +58,8 @@ for k, cluster_file in zip(k_values, cluster_files):
     ]
 
     # === 5. Features list ===
-    features = [col for col in df.columns if col not in exclude_cols]
-    print(f"Number of features: {len(features)}")
+    features = [col for col in df.columns if col not in exclude_cols and pd.api.types.is_numeric_dtype(df[col])]
+    print(f"Number of numeric features: {len(features)}")
 
     # === 6. First, get unique cells ===
     # Average features per cell (Parent+Experiment) within cluster
@@ -99,9 +99,10 @@ for k, cluster_file in zip(k_values, cluster_files):
     print(f"Saved: embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells{k_suffix}.xlsx")
 
     # === 10. Dose-stratified descriptive tables (if dose data available) ===
-    if dose_data is not None and "DoseLabel" in df.columns:
-        df = df.merge(dose_data[["Experiment", "Parent", "DoseLabel"]], 
-                      on=["Experiment", "Parent"], how="left")
+    if dose_data is not None:
+        if "DoseLabel" not in df.columns:
+            df = df.merge(dose_data[["Experiment", "Parent", "DoseLabel"]], 
+                          on=["Experiment", "Parent"], how="left")
         
         unique_doses = [d for d in df["DoseLabel"].unique() if pd.notna(d) and d != ""]
         

@@ -680,7 +680,7 @@ for name, df_obj, mf in [
                                 models_per_feature=mf,
                                 transformer=log_z_pipe)
     path = f"fitting_{name}.json"
-    with open(f"fitting_{name}.json","w") as f:
+    with open(f"fitting/fitting_{name}.json","w") as f:
         json.dump(out_json, f, indent=2)
     print(f"Saved fitting_{name}.json (imputed+logged+z-scaled, {imp} NaNs)")
 
