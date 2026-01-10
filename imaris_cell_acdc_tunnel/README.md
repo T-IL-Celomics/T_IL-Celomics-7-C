@@ -12,17 +12,15 @@ The goal is to make Cell-ACDC results easier to:
 
 ## Folder structure
 
-```
-
+```text
 imaris_cell_acdc_tunnel/
+├─ README.md
 ├─ optimization/
-│  ├─ (scripts + crosswalk experiments + validation vs Imaris)
 │  └─ README.md
 └─ active_tunnel/
-├─ (future: stable/production-ready version for pipeline)
-└─ README.md
+   └─ README.md
+```
 
-````
 
 - **optimization/**: where we are currently working (crosswalk tuning, second-pass derived metrics, debugging).
 - **active_tunnel/**: future folder for the “final” stable version that will be integrated into the full project pipeline.
