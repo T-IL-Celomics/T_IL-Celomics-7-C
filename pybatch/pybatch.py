@@ -1674,7 +1674,8 @@ def run_page(state, log_file, initial_session_id):
                                                              batch_exp_info["incucyte_files"],
                                                              batch_exp_info["imaris_xls_files"], dt=exp["dt"],
                                                              design=batch_exp_info["design"],
-                                                             table_info=batch_exp_info["table_info"])
+                                                             table_info=batch_exp_info["table_info"],
+                                                             exp_rename_dir=exp["rename_dir"])
                                 if exp["full"] == True:
                                     batch_exp.load_wells_from_summary_folder(exp["summary_table_path"])
                                 else:

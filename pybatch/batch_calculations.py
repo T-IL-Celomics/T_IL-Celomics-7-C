@@ -19,6 +19,8 @@ import io
 import pstats
 import matplotlib.pyplot as plt
 from itertools import product
+from pathlib import Path
+
 
 WORKING_WIDTH = 297
 WORKING_HEIGHT = 180
@@ -69,47 +71,53 @@ FOURTY_GRAPH_Y = [30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 66.0, 66.0, 66
 
 MIN_SCRATCH_DIFF = 0.05
 
-PARAM_GRAPHS= {"Instantaneous_Speed": ["y_pos_time", "average", "layers", "layers_scaled"],
-               "Velocity_X": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Velocity_Y": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Velocity_Z": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Displacement_From_Last_Id": ["y_pos_time", "average", "layers", "layers_scaled"],
-               "Coll": ["y_pos_time", "average", "layers", "layers_scaled"],
-               "Coll_CUBE": ["y_pos_time", "average", "layers", "layers_scaled"],
-               "Acceleration": ["y_pos_time", "average", "layers", "layers_scaled"],
-               "Acceleration_X": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Acceleration_Y": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Acceleration_Z": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers", "absolute_layers_scaled"],
-               "Displacement2": ["average"],
-               "Directional_Change": ["average"],
-               "Volume": ["average"],
-               "Ellipticity_oblate": ["average"],
-               "Ellipticity_prolate": ["average"],
-               "Eccentricity": ["average"],
-               "Sphericity": ["average"],
-               "EllipsoidAxisLengthB": ["average"],
-               "EllipsoidAxisLengthC": ["average"],
-               "Ellip_Ax_B_X": ["average"],
-               "Ellip_Ax_B_Y": ["average"],
-               "Ellip_Ax_C_X": ["average"],
-               "Ellip_Ax_C_Y": ["average"],
-               "Instantaneous_Angle": ["average"],
-               "IntensityCenterCh1": ["y_pos_time", "average"],
-               "IntensityCenterCh2": ["y_pos_time", "average"],
-               "IntensityCenterCh3": ["y_pos_time", "average"],
-               "IntensityMaxCh1": ["y_pos_time", "average"],
-               "IntensityMaxCh2": ["y_pos_time", "average"],
-               "IntensityMaxCh3": ["y_pos_time", "average"],
-               "IntensityMeanCh1": ["y_pos_time", "average"],
-               "IntensityMeanCh2": ["y_pos_time", "average"],
-               "IntensityMeanCh3": ["y_pos_time", "average"],
-               "IntensityMedianCh1": ["y_pos_time", "average"],
-               "IntensityMedianCh2": ["y_pos_time", "average"],
-               "IntensityMedianCh3": ["y_pos_time", "average"],
-               "IntensitySumCh1": ["y_pos_time", "average"],
-               "IntensitySumCh2": ["y_pos_time", "average"],
-               "IntensitySumCh3": ["y_pos_time", "average"],
-               "Min_Distance": ["y_pos_time", "layers", "layers_scaled"]}
+PARAM_GRAPHS = {"Instantaneous_Speed": ["y_pos_time", "average", "layers", "layers_scaled"],
+                "Velocity_X": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers",
+                               "absolute_layers_scaled"],
+                "Velocity_Y": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers",
+                               "absolute_layers_scaled"],
+                "Velocity_Z": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average", "absolute_layers",
+                               "absolute_layers_scaled"],
+                "Displacement_From_Last_Id": ["y_pos_time", "average", "layers", "layers_scaled"],
+                "Coll": ["y_pos_time", "average", "layers", "layers_scaled"],
+                "Coll_CUBE": ["y_pos_time", "average", "layers", "layers_scaled"],
+                "Acceleration": ["y_pos_time", "average", "layers", "layers_scaled"],
+                "Acceleration_X": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average",
+                                   "absolute_layers", "absolute_layers_scaled"],
+                "Acceleration_Y": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average",
+                                   "absolute_layers", "absolute_layers_scaled"],
+                "Acceleration_Z": ["y_pos_time", "absolute_y_pos_time", "average", "absolute_average",
+                                   "absolute_layers", "absolute_layers_scaled"],
+                "Displacement2": ["average"],
+                "Directional_Change": ["average"],
+                "Volume": ["average"],
+                "Ellipticity_oblate": ["average"],
+                "Ellipticity_prolate": ["average"],
+                "Eccentricity": ["average"],
+                "Sphericity": ["average"],
+                "EllipsoidAxisLengthB": ["average"],
+                "EllipsoidAxisLengthC": ["average"],
+                "Ellip_Ax_B_X": ["average"],
+                "Ellip_Ax_B_Y": ["average"],
+                "Ellip_Ax_C_X": ["average"],
+                "Ellip_Ax_C_Y": ["average"],
+                "Instantaneous_Angle": ["average"],
+                "IntensityCenterCh1": ["y_pos_time", "average"],
+                "IntensityCenterCh2": ["y_pos_time", "average"],
+                "IntensityCenterCh3": ["y_pos_time", "average"],
+                "IntensityMaxCh1": ["y_pos_time", "average"],
+                "IntensityMaxCh2": ["y_pos_time", "average"],
+                "IntensityMaxCh3": ["y_pos_time", "average"],
+                "IntensityMeanCh1": ["y_pos_time", "average"],
+                "IntensityMeanCh2": ["y_pos_time", "average"],
+                "IntensityMeanCh3": ["y_pos_time", "average"],
+                "IntensityMedianCh1": ["y_pos_time", "average"],
+                "IntensityMedianCh2": ["y_pos_time", "average"],
+                "IntensityMedianCh3": ["y_pos_time", "average"],
+                "IntensitySumCh1": ["y_pos_time", "average"],
+                "IntensitySumCh2": ["y_pos_time", "average"],
+                "IntensitySumCh3": ["y_pos_time", "average"],
+                "Min_Distance": ["y_pos_time", "layers", "layers_scaled"]}
 
 PARAM_PAIR_GRAPHS = {("Velocity_X", "Velocity_Y"): ["average", "absolute"],
                      ("Velocity_X", "Velocity_Z"): ["average", "absolute"],
@@ -141,47 +149,81 @@ PARAM_PAIR_GRAPHS = {("Velocity_X", "Velocity_Y"): ["average", "absolute"],
                      ("IntensitySumCh1", "IntensitySumCh3"): ["average"],
                      ("IntensitySumCh2", "IntensitySumCh3"): ["average"]}
 
-WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Ending_Value",
+WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height",
+                   "Velocity_Ending_Value",
                    "Velocity_Ending_Time", "Velocity_Starting_Value", "Velocity_Starting_Time"]
-LEFT_WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Starting_Value", "Velocity_Starting_Time"]
-RIGHT_WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height", "Velocity_Ending_Value", "Velocity_Ending_Time"]
+LEFT_WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height",
+                        "Velocity_Maximum_Height", "Velocity_Starting_Value", "Velocity_Starting_Time"]
+RIGHT_WAVE_PARAMETERS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Time_of_Maximum_Height",
+                         "Velocity_Maximum_Height", "Velocity_Ending_Value", "Velocity_Ending_Time"]
 
-DISPLACEMENT_PARAMS = ["Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X", "Track_Displacement_Y", "Track_Displacement_Z"]
+DISPLACEMENT_PARAMS = ["Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X",
+                       "Track_Displacement_Y", "Track_Displacement_Z"]
 
-MOTILITY_PARAMS = ["Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed", "Confinement_Ratio"]
+MOTILITY_PARAMS = ["Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed",
+                   "Confinement_Ratio"]
 
-MSD_PARAMS = ["MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score", "MSD_Brownian_D", "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D", "MSD_Directed_v2"]
+MSD_PARAMS = ["MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score", "MSD_Brownian_D",
+              "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D", "MSD_Directed_v2"]
 
-UNIT_DICT = {"Instantaneous_Speed": r" [$\mu$m/h]", "Velocity_X": r" [$\mu$m/h]", "Velocity_Y": r" [$\mu$m/h]", "Velocity_Z": r" [$\mu$m/h]",
-             "Acceleration": r" [$\mu$m/$h^2$]", "Acceleration_X": r" [$\mu$m/$h^2$]", "Acceleration_Y": r" [$\mu$m/$h^2$]", "Acceleration_Z": r" [$\mu$m/$h^2$]",
-             "Coll": "", "Coll_CUBE": "", "Displacement2": r"[$\mu$$m^2$]", "Directional_Change": " [radians]", "Volume": r"[$\mum^3$]", "Ellipticity_oblate": "",
-             "Ellipticity_prolate": "", "Eccentricity": "", "Sphericity": "", "EllipsoidAxisLengthB": r" [$\mu$m]", "EllipsoidAxisLengthC": r" [$\mu$m]",
-             "Ellip_Ax_B_X": "", "Ellip_Ax_B_Y": "", "Ellip_Ax_C_X": "", "Ellip_Ax_C_Y": "", "Instantaneous_Angle": " [radians]",
-             "Velocity_Full_Width_Half_Maximum": " [min]", "Velocity_Time_of_Maximum_Height": " [min]", "Velocity_Maximum_Height": r" [$\mu$m/h]",
-             "Velocity_Ending_Value": r" [$\mu$m/h]", "Velocity_Ending_Time": " [min]", "Velocity_Starting_Value": r" [$\mu$m/h]", "Velocity_Starting_Time": " [min]",
-             "Area": r" [$\mu$$m^2$]", "Overall_Displacement": r" [$\mu$m]", "Total_Track_Displacement": r" [$\mu$m]", "Track_Displacement_X": r" [$\mu$m]",
-             "Track_Displacement_Y": r" [$\mu$m]", "Track_Displacement_Z": r" [$\mu$m]", "Linearity_of_Forward_Progression": "", "Confinement_Ratio": "",
-             "Mean_Curvilinear_Speed": r" [$\mu$m/h]", "Mean_Straight_Line_Speed": r" [$\mu$m/h]", "MSD_Linearity_R2_Score": "", "MSD_Brownian_Motion_BIC_Score": "",
-             "MSD_Brownian_D": "", "MSD_Directed_Motion_BIC_Score": "", "MSD_Directed_D": "", "MSD_Directed_v2": "", "Min_Distance": r" [$\mu$m]",
-             "Displacement_From_Last_Id": r" [$\mu$m]", "IntensityCenterCh1": "", "IntensityCenterCh2": "","IntensityCenterCh3": "", "IntensityMaxCh1": "", "IntensityMaxCh2": "","IntensityMaxCh3": "", "IntensityMeanCh1": "",
-             "IntensityMeanCh2": "","IntensityMeanCh3": "", "IntensityMedianCh1": "", "IntensityMedianCh2": "","IntensityMedianCh3": "", "IntensitySumCh1": "", "IntensitySumCh2": "","IntensitySumCh3": ""}
+UNIT_DICT = {"Instantaneous_Speed": r" [$\mu$m/h]", "Velocity_X": r" [$\mu$m/h]", "Velocity_Y": r" [$\mu$m/h]",
+             "Velocity_Z": r" [$\mu$m/h]",
+             "Acceleration": r" [$\mu$m/$h^2$]", "Acceleration_X": r" [$\mu$m/$h^2$]",
+             "Acceleration_Y": r" [$\mu$m/$h^2$]", "Acceleration_Z": r" [$\mu$m/$h^2$]",
+             "Coll": "", "Coll_CUBE": "", "Displacement2": r"[$\mu$$m^2$]", "Directional_Change": " [radians]",
+             "Volume": r"[$\mum^3$]", "Ellipticity_oblate": "",
+             "Ellipticity_prolate": "", "Eccentricity": "", "Sphericity": "", "EllipsoidAxisLengthB": r" [$\mu$m]",
+             "EllipsoidAxisLengthC": r" [$\mu$m]",
+             "Ellip_Ax_B_X": "", "Ellip_Ax_B_Y": "", "Ellip_Ax_C_X": "", "Ellip_Ax_C_Y": "",
+             "Instantaneous_Angle": " [radians]",
+             "Velocity_Full_Width_Half_Maximum": " [min]", "Velocity_Time_of_Maximum_Height": " [min]",
+             "Velocity_Maximum_Height": r" [$\mu$m/h]",
+             "Velocity_Ending_Value": r" [$\mu$m/h]", "Velocity_Ending_Time": " [min]",
+             "Velocity_Starting_Value": r" [$\mu$m/h]", "Velocity_Starting_Time": " [min]",
+             "Area": r" [$\mu$$m^2$]", "Overall_Displacement": r" [$\mu$m]", "Total_Track_Displacement": r" [$\mu$m]",
+             "Track_Displacement_X": r" [$\mu$m]",
+             "Track_Displacement_Y": r" [$\mu$m]", "Track_Displacement_Z": r" [$\mu$m]",
+             "Linearity_of_Forward_Progression": "", "Confinement_Ratio": "",
+             "Mean_Curvilinear_Speed": r" [$\mu$m/h]", "Mean_Straight_Line_Speed": r" [$\mu$m/h]",
+             "MSD_Linearity_R2_Score": "", "MSD_Brownian_Motion_BIC_Score": "",
+             "MSD_Brownian_D": "", "MSD_Directed_Motion_BIC_Score": "", "MSD_Directed_D": "", "MSD_Directed_v2": "",
+             "Min_Distance": r" [$\mu$m]",
+             "Displacement_From_Last_Id": r" [$\mu$m]", "IntensityCenterCh1": "", "IntensityCenterCh2": "",
+             "IntensityCenterCh3": "", "IntensityMaxCh1": "", "IntensityMaxCh2": "", "IntensityMaxCh3": "",
+             "IntensityMeanCh1": "",
+             "IntensityMeanCh2": "", "IntensityMeanCh3": "", "IntensityMedianCh1": "", "IntensityMedianCh2": "",
+             "IntensityMedianCh3": "", "IntensitySumCh1": "", "IntensitySumCh2": "", "IntensitySumCh3": ""}
 
-MARKERS = ["o", "^", "s", "P", "D", "X", "v", "<", ">", "p", ".", "1", "3", "4"] + ["$%s$" % chr(97+i) for i in range(26)]
+MARKERS = ["o", "^", "s", "P", "D", "X", "v", "<", ">", "p", ".", "1", "3", "4"] + ["$%s$" % chr(97 + i) for i in
+                                                                                    range(26)]
 LINE_COLORS = list(colors.TABLEAU_COLORS.keys()) + list(colors.XKCD_COLORS.keys())[:30]
 
-CLUSTER_DROP_FIELDS = ["Parent", "Parent_OLD", "dt", "ID", "TimeIndex", "x_Pos", "y_Pos", "z_Pos", "Current_MSD_1", "Final_MSD_1",
-                       "Instantaneous_Speed_OLD", "Instantaneous_Angle_OLD", "Directional_Change_OLD", "Experiment", "Acceleration_OLD"]
-CLUSTER_ID_FIELDS = ["Area", "Displacement_From_Last_Id", "Instantaneous_Speed", "Velocity_X", "Velocity_Y", "Velocity_Z", "Coll", "Coll_CUBE", "Acceleration", "Acceleration_X",
-                     "Acceleration_Y", "Acceleration_Z", "Displacement2", "Directional_Change", "Directional_Change_X", "Directional_Change_Y", "Directional_Change_Z", "Volume",
-                     "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B", "Eccentricity_C", "Sphericity", "EllipsoidAxisLengthB",
-                     "EllipsoidAxisLengthC", "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X", "Ellip_Ax_C_Y", "Ellip_Ax_C_Z", "Instantaneous_Angle",
-                     "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z", "Min_Distance", "IntensityCenterCh1", "IntensityCenterCh2","IntensityCenterCh3", "IntensityMaxCh1",
-                     "IntensityMaxCh2","IntensityMaxCh3", "IntensityMeanCh1", "IntensityMeanCh2","IntensityMeanCh3", "IntensityMedianCh1", "IntensityMedianCh2","IntensityMedianCh3", "IntensitySumCh1", "IntensitySumCh2","IntensitySumCh3"]
-CLUSTER_CELL_FIELDS = ["Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X", "Track_Displacement_Y", "Track_Displacement_Z",
-                       "Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed", "Confinement_Ratio", "MSD_Directed_v2",
-                       "MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score", "MSD_Brownian_D", "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D",
+CLUSTER_DROP_FIELDS = ["Parent", "Parent_OLD", "dt", "ID", "TimeIndex", "x_Pos", "y_Pos", "z_Pos", "Current_MSD_1",
+                       "Final_MSD_1",
+                       "Instantaneous_Speed_OLD", "Instantaneous_Angle_OLD", "Directional_Change_OLD", "Experiment",
+                       "Acceleration_OLD"]
+CLUSTER_ID_FIELDS = ["Area", "Displacement_From_Last_Id", "Instantaneous_Speed", "Velocity_X", "Velocity_Y",
+                     "Velocity_Z", "Coll", "Coll_CUBE", "Acceleration", "Acceleration_X",
+                     "Acceleration_Y", "Acceleration_Z", "Displacement2", "Directional_Change", "Directional_Change_X",
+                     "Directional_Change_Y", "Directional_Change_Z", "Volume",
+                     "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B",
+                     "Eccentricity_C", "Sphericity", "EllipsoidAxisLengthB",
+                     "EllipsoidAxisLengthC", "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X",
+                     "Ellip_Ax_C_Y", "Ellip_Ax_C_Z", "Instantaneous_Angle",
+                     "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z", "Min_Distance",
+                     "IntensityCenterCh1", "IntensityCenterCh2", "IntensityCenterCh3", "IntensityMaxCh1",
+                     "IntensityMaxCh2", "IntensityMaxCh3", "IntensityMeanCh1", "IntensityMeanCh2", "IntensityMeanCh3",
+                     "IntensityMedianCh1", "IntensityMedianCh2", "IntensityMedianCh3", "IntensitySumCh1",
+                     "IntensitySumCh2", "IntensitySumCh3"]
+CLUSTER_CELL_FIELDS = ["Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X",
+                       "Track_Displacement_Y", "Track_Displacement_Z",
+                       "Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed",
+                       "Confinement_Ratio", "MSD_Directed_v2",
+                       "MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score", "MSD_Brownian_D",
+                       "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D",
                        "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height"]
-CLUSTER_WAVE_FIELDS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Ending_Value", "Velocity_Ending_Time", "Velocity_Starting_Value",
+CLUSTER_WAVE_FIELDS = ["Velocity_Full_Width_Half_Maximum", "Velocity_Ending_Value", "Velocity_Ending_Time",
+                       "Velocity_Starting_Value",
                        "Velocity_Starting_Time"]
 
 DICTS = ["min_max_dict", "middles_dict", "layers_min_max_dict", "scratch_dict", "scratch_min_max_dict", "msd_info"]
@@ -190,8 +232,16 @@ POSITIONS = ["x_Pos", "y_Pos", "z_Pos"]
 
 average_df = None
 
+def list_names(dir_path: str, recursive: bool = False):
+    p = Path(dir_path)
+    it = p.rglob("*") if recursive else p.iterdir()
+    return sorted([x.name for x in it if x.is_file()])
+
+
 class PDF(FPDF):
     pass
+
+
 """ # return this if you want page numbers
     def footer(self):
         # Go to 1 cm from bottom
@@ -202,17 +252,18 @@ class PDF(FPDF):
         self.cell(0, 10, 'Page %s' % self.page_no(), 0, 0, 'C')
 """
 
+
 class Batch_Experiment(object):
 
     def __init__(self, exp_name, exp_sub_name, wells, scratch, protocol_file="", incucyte_files="", imaris_xls_files="",
-                 dt=45, design="auto", table_info=None):
+                 dt=45, design="auto", table_info=None,exp_rename_dir =""):
         self.exp_name = exp_name
         self.exp_sub_name = exp_sub_name
         self.wells = wells
         self.scratch = scratch
         self.well_amount = len(wells)
         self.well_info = {}
-        self.protocol_file =protocol_file
+        self.protocol_file = protocol_file
         self.incucyte_files = incucyte_files
         self.imaris_xls_files = imaris_xls_files
         self.dt = dt
@@ -225,6 +276,7 @@ class Batch_Experiment(object):
         self.graph_counter = 97
         self.design = design
         self.table_info = table_info
+        self.exp_rename_dir = exp_rename_dir
 
     def __has_attribute__(self, attribute):
         if attribute in self.__dict__.keys():
@@ -233,22 +285,34 @@ class Batch_Experiment(object):
             return False
 
 
+
+
     def _infer_dose_by_channel_from_df(self, well_df):
         """
         returns dict like {"ch1":"POS", "ch2":"NEG"} based on mode over time.
         if a channel column doesn't exist, it's ignored.
         """
-        dose_by_ch = {}
-        for ch in [1, 2, 3]:
-            col = f"Cha{ch}_Category"
-            if col not in well_df.columns:
-                continue
-            s = well_df[col].dropna().astype(str).str.upper()
-            s = s[s.isin(["NEG", "POS", "HIGH"])]
-            if len(s) == 0:
-                continue
-            dose_by_ch[f"ch{ch}"] = s.value_counts().idxmax()
-        return dose_by_ch
+
+        cols = [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in well_df.columns]
+
+        if not cols:
+            return []
+
+        # ensure no NaNs kill combos
+        tmp = well_df[cols].fillna("NA")
+
+        # build combos row-wise, but keep only the channels that exist in this df
+        combos = tmp.apply(lambda r: "_".join([str(r[c]) for c in cols]), axis=1)
+
+        # unique combos, drop the all-NA combo if you want
+        combos = combos.unique().tolist()
+        # optional: remove all-NA
+        all_na = "_".join(["NA"] * len(cols))
+        combos = [c for c in combos if c != all_na]
+
+        return combos
+
+
 
     def _dose_combo_str(self, dose_by_channel):
         """
@@ -269,7 +333,7 @@ class Batch_Experiment(object):
             return [s] if s else []
         tail = s[3:]  # remove 'B02'
         # split into 4-letter chunks
-        chunks = [tail[i:i+4] for i in range(0, len(tail), 4) if len(tail[i:i+4]) == 4]
+        chunks = [tail[i:i + 4] for i in range(0, len(tail), 4) if len(tail[i:i + 4]) == 4]
         return chunks
 
     def _treatment_key(self, well):
@@ -279,7 +343,7 @@ class Batch_Experiment(object):
         """
         chunks = self._treatment_chunks_from_short(well)
         return "+".join(chunks) if chunks else self.shortened_well_names.get(well, str(well))
-    
+
     def _dose_level_ch1(self, well_df):
         if "Cha1_Category" not in well_df.columns:
             return "NO_CH1"
@@ -287,11 +351,10 @@ class Batch_Experiment(object):
         s = s[s.isin(["NEG", "POS", "HIGH"])]
         return s.value_counts().idxmax() if len(s) else "NO_CH1"
 
-
-
-    def _min_max(self, attribute, min_val=None, max_val=None, multiplier=1, log=False, absolute=False, average=False, scaled=True):
+    def _min_max(self, attribute, min_val=None, max_val=None, multiplier=1, log=False, absolute=False, average=False,
+                 scaled=True):
         parameter = attribute
-        if log: # no longer in use
+        if log:  # no longer in use
             attribute += "_log"
         if absolute:
             attribute += "_abs"
@@ -310,7 +373,8 @@ class Batch_Experiment(object):
             if average:
                 time_indexes = np.array(well_df.TimeIndex.unique())
                 time_indexes.sort()
-                time_values = np.array([well_df[well_df.TimeIndex == time_index][parameter] for time_index in time_indexes])
+                time_values = np.array(
+                    [well_df[well_df.TimeIndex == time_index][parameter] for time_index in time_indexes])
                 if log:
                     time_values = np.log(time_values)
                 if absolute:
@@ -362,7 +426,8 @@ class Batch_Experiment(object):
             for time_index in well_df.TimeIndex.unique():
                 time_df = well_df[well_df.TimeIndex == time_index]
                 layer_dfs = [time_df[abs(time_df[axis] - middle) >= jump * i] for i in range(len(distances))]
-                layer_dfs = [layer_dfs[i][abs(layer_dfs[i][axis] - middle) < jump * (i+1)] for i in range(len(distances))]
+                layer_dfs = [layer_dfs[i][abs(layer_dfs[i][axis] - middle) < jump * (i + 1)] for i in
+                             range(len(distances))]
                 values = np.array([layer_df[parameter] for layer_df in layer_dfs])
                 if log:
                     values = np.log(values)
@@ -377,7 +442,8 @@ class Batch_Experiment(object):
         self.layers_min_max_dict[attribute] = (min_val, max_val)
         return min_val, max_val
 
-    def _scratch_min_max(self, attribute, min_val=0, max_val=1, absolute=False, intervals=15, groups=False, fixed_distance=30, scaled=False):
+    def _scratch_min_max(self, attribute, min_val=0, max_val=1, absolute=False, intervals=15, groups=False,
+                         fixed_distance=30, scaled=False):
         parameter = attribute
         if absolute:
             attribute += "_absolute"
@@ -403,10 +469,10 @@ class Batch_Experiment(object):
                 for i in range(intervals):
                     top_group = time_df[time_df.y_Pos >= scratch_top + (i * top_interval)]
                     if i != intervals - 1:
-                        top_group = top_group[top_group.y_Pos < scratch_top + ((i+1) * top_interval)]
+                        top_group = top_group[top_group.y_Pos < scratch_top + ((i + 1) * top_interval)]
                     bottom_group = time_df[time_df.y_Pos <= scratch_bottom - (i * bottom_interval)]
                     if i != intervals - 1:
-                        bottom_group = bottom_group[bottom_group.y_Pos > scratch_bottom - ((i+1) * bottom_interval)]
+                        bottom_group = bottom_group[bottom_group.y_Pos > scratch_bottom - ((i + 1) * bottom_interval)]
                     top_group = top_group[parameter]
                     bottom_group = bottom_group[parameter]
                     if absolute:
@@ -463,7 +529,7 @@ class Batch_Experiment(object):
         min_val, max_val = min(axis_column), max(axis_column)
         middle = round((max_val - min_val) / 2)
         jump = round((max_val - min_val) / (2 * intervals))
-        distances = ["%d - %d" % (jump * i, jump * (i+1)) for i in range(intervals)]
+        distances = ["%d - %d" % (jump * i, jump * (i + 1)) for i in range(intervals)]
         distances[-1] = distances[-1].split("-")[0] + "+"
         self.middles_dict[dict_key] = [middle, jump, distances]
         return middle, jump, distances
@@ -500,16 +566,19 @@ class Batch_Experiment(object):
                 outlier_diff_size = mean_diff + 2 * diff_std
                 noise_cells_allowed = len(df) / 100
                 for i in range(1, 10):
-                    scratch_indices = np.where(diffs >= i * outlier_diff_size)[0] # dynamic
+                    scratch_indices = np.where(diffs >= i * outlier_diff_size)[0]  # dynamic
                     if scratch_indices.size == 0:
                         scratch_closed = True
                     elif scratch_indices[-1] - scratch_indices[0] > noise_cells_allowed:
                         if i == 9:
-                            print("============================================ERROR MESSAGE============================================")
+                            print(
+                                "============================================ERROR MESSAGE============================================")
                             for i in range(len(diffs)):
                                 if diffs[i] > i * outlier_diff_size:
-                                    print("index:", i, "y positions:",y_positions[i], y_positions[i+1], "diff:", diffs[i])
-                            raise ValueError("Found more than one scratch. Try adjusting the min scratch diff, or call Ori")
+                                    print("index:", i, "y positions:", y_positions[i], y_positions[i + 1], "diff:",
+                                          diffs[i])
+                            raise ValueError(
+                                "Found more than one scratch. Try adjusting the min scratch diff, or call Ori")
                     else:
                         scratch_top = y_positions[scratch_indices[0]]
                         scratch_bottom = y_positions[scratch_indices[-1] + 1]
@@ -528,15 +597,17 @@ class Batch_Experiment(object):
                         x_size = max(df.x_Pos) - min_x
                         fig, ax = plt.subplots()
                         if not scratch_closed:
-                            rect = patches.Rectangle((min_x, scratch_bottom), width=x_size, height=scratch_top - scratch_bottom, color="red")
+                            rect = patches.Rectangle((min_x, scratch_bottom), width=x_size,
+                                                     height=scratch_top - scratch_bottom, color="red")
                             ax.add_patch(rect)
                         ax.scatter(df.x_Pos, df.y_Pos, zorder=50)
                         ax.set_title(self.shortened_well_names[well] + " TimeIndex %d" % time_index)
                         ax.set_xlabel("x_Pos")
                         ax.set_ylabel("y_Pos")
-                        fig.savefig(os.path.join(output_folder, self.shortened_well_names[well] + "_%d" % time_index + ".jpg"))
+                        fig.savefig(
+                            os.path.join(output_folder, self.shortened_well_names[well] + "_%d" % time_index + ".jpg"))
                         plt.close(fig)
-                        break # break here because we found a good scratch - no need to continue making a more generous minimum distance
+                        break  # break here because we found a good scratch - no need to continue making a more generous minimum distance
             if scratch_closed:
                 scratch_per_time[time_index] = (middle, middle, intervals_from_middle, intervals_from_middle)
             previous_time = time_index
@@ -559,14 +630,15 @@ class Batch_Experiment(object):
                     cell_df.set_index("TimeIndex", inplace=True)
                     if len(cell_df) > 6:
                         temp_dict = {}
-                        cell_df = cell_df.reindex(range(cell_df.index[0], cell_df.index[-1] + 1)) # fills with NaN
+                        cell_df = cell_df.reindex(range(cell_df.index[0], cell_df.index[-1] + 1))  # fills with NaN
                         max_tau = int(np.ceil((cell_df.index[-1] - cell_df.index[0]) / 2))
                         self.msd_info[well]["max_tau"] = max([self.msd_info[well]["max_tau"], max_tau])
                         for tau in range(1, max_tau + 1):
                             deltas_squared = np.array([0] * (len(cell_df) - tau))
                             for pos in POSITIONS[:self.dimensions]:
-                                deltas_squared = deltas_squared + (np.array(cell_df[pos][tau:]) - np.array(cell_df[pos][:-tau])) ** 2
-                            deltas_squared = deltas_squared[~np.isnan(deltas_squared)] # throws out missing values
+                                deltas_squared = deltas_squared + (
+                                        np.array(cell_df[pos][tau:]) - np.array(cell_df[pos][:-tau])) ** 2
+                            deltas_squared = deltas_squared[~np.isnan(deltas_squared)]  # throws out missing values
                             if len(deltas_squared) != 0:
                                 msd = sum(deltas_squared) / len(deltas_squared)
                                 temp_dict[tau] = msd
@@ -585,6 +657,100 @@ class Batch_Experiment(object):
             self.max_msd = max(self.max_msd, self.msd_info[well]["max_msd"])
             self.max_tau = max(self.max_tau, self.msd_info[well]["max_tau"])
         self.msd_info = self.msd_info
+
+    def add_category_to_well_info(self):
+        for well in self.wells:
+
+            print(f"\n=== ADD CATEGORY: well={well} ===")
+
+            well_df = self.well_info[well].copy()
+            print("initial well_df shape:", well_df.shape)
+            print("initial columns:", list(well_df.columns))
+
+            # ensure category columns exist
+            for i in (1, 2, 3):
+                col = f"Cha{i}_Category"
+                if col not in well_df.columns:
+                    well_df[col] = np.nan
+
+            fname = f"{well}.xlsx"
+            files = list_names(self.exp_rename_dir)
+            print("looking for file:", fname)
+            print("found:", fname in files)
+
+            if fname not in files:
+                print("file not found → only NaNs added")
+                self.well_info[well] = well_df
+                continue
+
+            path = os.path.join(self.exp_rename_dir, fname)
+            acc_df = pd.read_excel(path, sheet_name="Acceleration")
+
+            print("acc_df shape:", acc_df.shape)
+            print("acc_df columns:", list(acc_df.columns))
+
+            # normalize column names
+            rename_map = {}
+            if "Time" in acc_df.columns and "TimeIndex" not in acc_df.columns:
+                rename_map["Time"] = "TimeIndex"
+            if "timeindex" in acc_df.columns and "TimeIndex" not in acc_df.columns:
+                rename_map["timeindex"] = "TimeIndex"
+            if "parent" in acc_df.columns and "Parent" not in acc_df.columns:
+                rename_map["parent"] = "Parent"
+
+            if rename_map:
+                print("renaming columns:", rename_map)
+                acc_df = acc_df.rename(columns=rename_map)
+
+            key = ["Parent", "TimeIndex"]
+            missing = [c for c in key if c not in acc_df.columns or c not in well_df.columns]
+            print("missing key columns:", missing)
+
+            if missing:
+                print("merge aborted due to missing keys")
+                self.well_info[well] = well_df
+                continue
+
+            for k in key:
+                well_df[k] = pd.to_numeric(well_df[k], errors="coerce").astype("Int64")
+                acc_df[k] = pd.to_numeric(acc_df[k], errors="coerce").astype("Int64")
+
+            cat_cols = [f"Cha{i}_Category" for i in (1, 2, 3) if f"Cha{i}_Category" in acc_df.columns]
+            print("category columns found in acc_df:", cat_cols)
+
+            if not cat_cols:
+                print("no category columns in acc_df → nothing to merge")
+                self.well_info[well] = well_df
+                continue
+
+            acc_small = acc_df[key + cat_cols].drop_duplicates(subset=key)
+            print("acc_small shape:", acc_small.shape)
+
+            merged = well_df.merge(acc_small, on=key, how="left", suffixes=("", "_raw"))
+            print("merged shape:", merged.shape)
+
+            for c in cat_cols:
+                raw = f"{c}_raw"
+                if raw in merged.columns:
+                    n_filled = merged[raw].notna().sum()
+                    print(f"merging {c}: filled {n_filled} rows")
+                    merged[c] = merged[raw].combine_first(merged[c])
+                    merged.drop(columns=[raw], inplace=True)
+
+            print("final columns:", list(merged.columns))
+            print("non-null counts:")
+            print(merged[cat_cols].notna().sum())
+
+
+
+            for i in (1, 2, 3):
+                c = f"Cha{i}_Category"
+                if c in merged.columns:
+                    merged[c] = merged[c].fillna("NA")
+
+            self.well_info[well] = merged
+
+            print("=== DONE ===\n")
 
     def load_wells_from_summary_table(self, summary_table):
         """
@@ -622,7 +788,8 @@ class Batch_Experiment(object):
 
     def load_wells_from_summary_folder(self, summary_folder):
         all_files = os.listdir(summary_folder)
-        full_well_files = [f for f in all_files if "_full" in f.lower() and "summary_table_" in f.lower() and f[0] != "~"]
+        full_well_files = [f for f in all_files if
+                           "_full" in f.lower() and "summary_table_" in f.lower() and f[0] != "~"]
         full_well_names = [f.split("_")[-2] for f in full_well_files]
 
         if len(self.wells[0]) == 3:
@@ -652,14 +819,14 @@ class Batch_Experiment(object):
                 else:
                     self.dimensions = 2
             elif parameters != self.parameters:
-                print(f"Warning: might have Different parameters for well {well}. Using intersection of columns. can be due to different number of channels between two wells")
+                print(
+                    f"Warning: might have Different parameters for well {well}. Using intersection of columns. can be due to different number of channels between two wells")
                 cols = list(set(parameters) & set(self.parameters))
-                if(len(self.parameters) < len(parameters)):
+                if (len(self.parameters) < len(parameters)):
                     self.parameters = parameters
                     cols = list(set(self.parameters))
                 well_df = well_df[cols]
             self.well_info[well] = well_df
-
 
         self.shortened_well_names = {well: well[18:-4].replace("NNN0", "") for well in self.wells}
         all_short_names = list(self.shortened_well_names.values())
@@ -672,7 +839,7 @@ class Batch_Experiment(object):
         self.wells.sort(key=lambda x: self.shortened_well_names[x])
 
     def make_output_folders(self, original_output_path):
-        #Creates the output path and making sure it's empty
+        # Creates the output path and making sure it's empty
         if not os.path.exists(original_output_path):
             os.mkdir(original_output_path)
         output_path = os.path.join(original_output_path, self.exp_name.replace(" ", "_"))
@@ -685,7 +852,7 @@ class Batch_Experiment(object):
         if already_run != []:
             if os.path.join(original_output_path, self.exp_name + "_report.pdf") in os.listdir(original_output_path):
                 already_run = "ALL"
-            #raise ValueError("Folder %s has stuff in it! Can't overwrite, clear it out or change the experiment name or sub name." % output_path)
+            # raise ValueError("Folder %s has stuff in it! Can't overwrite, clear it out or change the experiment name or sub name." % output_path)
         self.output_path = output_path
         return already_run
 
@@ -711,7 +878,8 @@ class Batch_Experiment(object):
             full_row_break = (WORKING_WIDTH - (self.graph_width * full_row_graphs)) / (full_row_graphs - 1)
             for i in range(self.row_num - 1):
                 self.graph_x_coords += [(full_row_break + self.graph_width) * j for j in range(full_row_graphs)]
-                self.graph_y_coords += [30 + (height_break / 2) + ((self.graph_width + height_break) * i)] * full_row_graphs
+                self.graph_y_coords += [30 + (height_break / 2) + (
+                        (self.graph_width + height_break) * i)] * full_row_graphs
         # find coords for last row:
         if last_row_graphs < self.well_amount / self.row_num:
             last_row_break = (WORKING_WIDTH - (self.graph_width * last_row_graphs)) / last_row_graphs
@@ -720,7 +888,8 @@ class Batch_Experiment(object):
         else:
             last_row_break = (WORKING_WIDTH - (self.graph_width * last_row_graphs)) / (last_row_graphs - 1)
             self.graph_x_coords += [(self.graph_width + last_row_break) * i for i in range(last_row_graphs)]
-        self.graph_y_coords += [30 + (height_break / 2) + ((self.graph_width + height_break) * (self.row_num - 1))] * last_row_graphs
+        self.graph_y_coords += [30 + (height_break / 2) + (
+                (self.graph_width + height_break) * (self.row_num - 1))] * last_row_graphs
 
     def _get_auto_table_coords(self):
         well_treatments = []
@@ -728,7 +897,7 @@ class Batch_Experiment(object):
             short_name = self.shortened_well_names[well]
             if len(short_name) > 8:
                 raise ValueError("A well (%s) has more than 2 treatments - we can't create a table." % short_name)
-            well_treatments += [short_name[i:i+4] for i in range(len(short_name) // 4)]
+            well_treatments += [short_name[i:i + 4] for i in range(len(short_name) // 4)]
         well_treatments = list(set(well_treatments))
         treatment_names = list(set([treat[:3] for treat in well_treatments if treat[:3] not in ["CON", "CTR"]]))
         if len(treatment_names) > 2:
@@ -745,7 +914,7 @@ class Batch_Experiment(object):
         self.row_names = ["Control"] + rows
 
     def set_table_coords(self):
-        if not self.table_info: # not sure this is useful but I already wrote it
+        if not self.table_info:  # not sure this is useful but I already wrote it
             self._get_auto_table_coords()
         else:
             self.column_treatments = self.table_info["column_treatments"]
@@ -802,7 +971,7 @@ class Batch_Experiment(object):
             self.pdf.cell(20, h=10, txt="", ln=0)
             for i in range(self.row_len):
                 self.pdf.cell((WORKING_WIDTH - 20) / self.row_len, h=10, txt=self.column_names[i], ln=0, align="C")
-                #self.pdf.line(self.graph_x_coords[i], 30, self.graph_x_coords[i], 210)
+                # self.pdf.line(self.graph_x_coords[i], 30, self.graph_x_coords[i], 210)
             self.pdf.ln()
             y_positions = list(set(self.graph_y_coords))
             y_positions.sort()
@@ -810,7 +979,7 @@ class Batch_Experiment(object):
             for i in range(self.col_len):
                 self.pdf.set_xy(0, y_positions[i])
                 self.pdf.cell(col_size, h=10, txt=self.row_names[i], ln=1, align="C")
-                #self.pdf.line(0, self.graph_y_coords[i], 297, self.graph_y_coords[i])
+                # self.pdf.line(0, self.graph_y_coords[i], 297, self.graph_y_coords[i])
 
     def write_table_to_pdf(self, columns):
         y_skip = ((WORKING_HEIGHT - (10 * len(columns))) / 2) - 10
@@ -824,7 +993,8 @@ class Batch_Experiment(object):
         ratios = [len(longest_row_list[j]) / len(longest_row) for j in range(len(longest_row_list))]
         for size in range(self.header_size - 4, 1, -1):
             self.pdf.set_font("arial", "", size)
-            if self.pdf.get_string_width(longest_row) < WORKING_WIDTH - 20: # -20 is just to be sure it doesn't go out of the lines
+            if self.pdf.get_string_width(
+                    longest_row) < WORKING_WIDTH - 20:  # -20 is just to be sure it doesn't go out of the lines
                 break
         for i in range(len(columns[0])):
             for j in range(len(columns)):
@@ -839,7 +1009,8 @@ class Batch_Experiment(object):
 
     def make_second_page(self):
         self.new_page("File information")
-        columns = [["Protocol_file", "Incucyte files", "Imaris xls files"], [self.protocol_file, self.incucyte_files, self.imaris_xls_files]]
+        columns = [["Protocol_file", "Incucyte files", "Imaris xls files"],
+                   [self.protocol_file, self.incucyte_files, self.imaris_xls_files]]
         if self.__has_attribute__("xls1_path"):
             columns[0].append("Excel Renaming (1)")
             columns[1].append(self.xls1_path)
@@ -872,13 +1043,13 @@ class Batch_Experiment(object):
         cells.sort(key=lambda x: list(well_df.Overall_Displacement[well_df.Parent == x])[0], reverse=True)
         if cell_amount_limit:
             cells = np.random.choice(cells, size=cell_amount_limit, replace=False)
-            #quarter_amount = int(cell_amount_limit / 4)
-            #cells = cells[:quarter_amount] + \
+            # quarter_amount = int(cell_amount_limit / 4)
+            # cells = cells[:quarter_amount] + \
             #        list(np.random.choice(cells, size=cell_amount_limit - (2 * quarter_amount), replace=False)) + \
             #        cells[-quarter_amount:]
         for cell in cells:
-            x_positions = np.array(well_df[axis1.lower()+"_Pos"][well_df.Parent == cell])
-            y_positions = np.array(well_df[axis2.lower()+"_Pos"][well_df.Parent == cell])
+            x_positions = np.array(well_df[axis1.lower() + "_Pos"][well_df.Parent == cell])
+            y_positions = np.array(well_df[axis2.lower() + "_Pos"][well_df.Parent == cell])
             x_distances = x_positions - x_positions[0]
             y_distances = y_positions - y_positions[0]
             graph_ax.plot(x_distances, y_distances)
@@ -956,7 +1127,8 @@ class Batch_Experiment(object):
             well = self.wells[i]
             if not os.path.exists(os.path.join(output_folder, well + ".jpg")):
                 self.draw_scratch(well, output_folder=output_folder)
-            self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
+            self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i],
+                           y=self.graph_y_coords[i], w=self.graph_width)
         all_images = os.listdir(output_folder)
         all_images = [image for image in all_images if "_" in image]
         for well in self.wells:
@@ -1111,7 +1283,8 @@ class Batch_Experiment(object):
         else:
             plt.show()
 
-    def draw_average_barplot(self, parameter, output_folder=None, absolute=False, wave=False, alt_name=None, per_cell=False):
+    def draw_average_barplot(self, parameter, output_folder=None, absolute=False, wave=False, alt_name=None,
+                             per_cell=False):
         global average_df
         fig, graph_ax = plt.subplots()
         graph_ax.set_title("%d%s - Average " % (self.pdf.page_no(), chr(self.graph_counter)) + parameter)
@@ -1156,20 +1329,19 @@ class Batch_Experiment(object):
             if absolute:
                 values = np.absolute(values)
 
-        
             exp_col.append(well)
-            values_col.append(sum(values)/len(values))
+            values_col.append(sum(values) / len(values))
 
             x.append(len(x))  # index for bar position
             height.append(np.average(values))
             yerrors.append(np.std(values) / (len(values) ** 0.5))
             x_tick_labels.append(self.shortened_well_names[well])
 
-        df = pd.DataFrame({"Experiment":exp_col , "Parameter":[parameter]*len(exp_col) , "Average_Value":values_col})
+        df = pd.DataFrame({"Experiment": exp_col, "Parameter": [parameter] * len(exp_col), "Average_Value": values_col})
         if average_df is None:
             average_df = df
         else:
-            average_df = pd.concat([average_df,df], ignore_index=True)
+            average_df = pd.concat([average_df, df], ignore_index=True)
 
         graph_ax.bar(x, height, color=LINE_COLORS[:len(x)], yerr=yerrors)
         graph_ax.set_xticks(x)
@@ -1205,6 +1377,96 @@ class Batch_Experiment(object):
         self.pdf.image(os.path.join(output_folder, "barplot.jpg"), x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1],
                        w=TWO_GRAPH_WIDTH)
 
+    def make_pdf_pages_dose_effect(self, parameters_to_plot=None):
+        """
+        Create PDF pages for dose effect analysis.
+        One graph per (parameter, treatment) showing all dose permutations.
+        """
+        self.make_dose_effect_pages(parameters_to_plot=parameters_to_plot)
+
+        out_dir = os.path.join(self.output_path, "dose_effect_pages")
+        if not os.path.exists(out_dir):
+            return
+
+        # Get all generated images
+        images = [f for f in os.listdir(out_dir) if f.endswith('.jpg')]
+
+        if not images:
+            return
+
+        images_sorted = sorted(images)
+
+        # Create pages with images (4 per page like standard layout)
+        for i in range(0, len(images_sorted), 4):
+            batch = images_sorted[i:i + 4]
+            self.new_page("Dose Effect Analysis", table=True)
+
+            for j, img_name in enumerate(batch):
+                img_path = os.path.join(out_dir, img_name)
+                if os.path.exists(img_path):
+                    x = FOUR_GRAPH_X[j]
+                    y = FOUR_GRAPH_Y[j]
+                    self.pdf.image(img_path, x=x, y=y, w=FOUR_GRAPH_WIDTH)
+
+    def make_pdf_pages_average_per_dose_combo(self, parameter=None, dose_combos=None):
+        """
+        Create PDF pages for average plots per dose combo permutation.
+        Each page has over_time and barplot for a specific dose combo.
+
+        Args:
+            parameter: specific parameter, or None to process all
+            dose_combos: list of specific combos, or None to auto-detect
+        """
+
+        def to_slash_combo(combo_str):
+            parts = str(combo_str).split("__")
+            doses = []
+            for p in parts:
+                if "=" in p:
+                    doses.append(p.split("=")[-1].strip().upper())
+            return "/".join(doses) if doses else "NO_CHANNEL_INFO"
+
+        # Auto-detect unique dose combos
+        if dose_combos is None:
+            unique_combos = set()
+            for well in self.wells:
+                well_df = self.well_info.get(well, pd.DataFrame())
+                if not well_df.empty:
+                    dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
+                    combo = self._dose_combo_str(dose_by_channel)
+                    combo_slash = to_slash_combo(combo)
+                    unique_combos.add(combo_slash)
+            dose_combos = sorted(list(unique_combos))
+
+        # Determine parameters to process
+        if parameter is None:
+            # Use all parameters from PARAM_GRAPHS + CLUSTER fields
+            params_to_process = list(PARAM_GRAPHS.keys()) + CLUSTER_CELL_FIELDS + CLUSTER_ID_FIELDS
+        else:
+            params_to_process = [parameter]
+
+        # Generate pages for each (parameter, dose_combo) pair
+        for param in params_to_process:
+            for combo in dose_combos:
+                # Generate the average page
+                self.make_average_page_per_dose_combo(param, dose_combo=combo)
+
+                # Add to PDF
+                title = f"{param} average values - {combo}"
+                output_folder = os.path.join(self.output_path, title)
+
+                if os.path.exists(output_folder):
+                    over_time_path = os.path.join(output_folder, "over_time.jpg")
+                    barplot_path = os.path.join(output_folder, "barplot.jpg")
+
+                    if os.path.exists(over_time_path) or os.path.exists(barplot_path):
+                        self.new_page(title)
+
+                        if os.path.exists(over_time_path):
+                            self.pdf.image(over_time_path, x=TWO_GRAPH_X[0], y=TWO_GRAPH_Y[0], w=TWO_GRAPH_WIDTH)
+
+                        if os.path.exists(barplot_path):
+                            self.pdf.image(barplot_path, x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1], w=TWO_GRAPH_WIDTH)
 
     def make_dose_effect_pages(self, parameters_to_plot=None):
         """
@@ -1213,8 +1475,10 @@ class Batch_Experiment(object):
         1 channel  -> NEG, POS, HIGH
         2 channels -> NEG/NEG, NEG/POS, ... , HIGH/HIGH
         3 channels -> 27 combos
+
+        FIX: First aggregate per-well values before plotting
         """
-        
+
         # ---------------------------
         # config / defaults
         # ---------------------------
@@ -1222,15 +1486,14 @@ class Batch_Experiment(object):
             parameters_to_plot = getattr(self, "parameters_to_plot", None)
 
         if parameters_to_plot is None or len(parameters_to_plot) == 0:
-            # fallback: try to infer numeric columns later from self.dataframe
+            # fallback: try to infer numeric columns later
             parameters_to_plot = []
 
         # output dir (same style as your existing code)
-        out_dir = os.path.join(self.output_folder, "dose_effect_pages")
+        out_dir = os.path.join(self.output_path, "dose_effect_pages")
         os.makedirs(out_dir, exist_ok=True)
 
         DOSE_LEVELS = ["NEG", "POS", "HIGH"]
-        DOSE_ORDER = {"NEG": 0, "POS": 1, "HIGH": 2}
 
         def all_combo_labels(n):
             return ["/".join(p) for p in product(DOSE_LEVELS, repeat=n)]
@@ -1257,48 +1520,85 @@ class Batch_Experiment(object):
             return s
 
         # ---------------------------
-        # build the per-well meta rows
+        # build the per-well meta + compute per-well averages
         # ---------------------------
-        # expected: self.well_list exists and self.dataframe has per-well rows/values
-        # if your code uses a different structure, adapt the "get value" line below.
         meta_rows = []
-        for well in self.well_list:
-            # treatment key from your existing helper
+        well_avg_data = {}  # {well: {param: avg_value}}
+
+        for well in self.wells:
             treatment = self._treatment_key(well)
+            well_df = self.well_info.get(well, pd.DataFrame())
 
-            # combo string from your existing helper (uses ChaX_Category)
-            combo = self._dose_combo_str(well)  # e.g., "ch1=NEG__ch2=POS"
+            if well_df.empty:
+                continue
 
-            meta_rows.append({"well": well, "treatment": treatment, "combo": combo})
+            dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
+            combo = self._dose_combo_str(dose_by_channel)
+            combo_slash = to_slash_combo(combo)
+
+            # Compute per-well averages for each parameter
+            well_avgs = {}
+            for param in CLUSTER_CELL_FIELDS + CLUSTER_ID_FIELDS + list(PARAM_GRAPHS.keys()):
+                if param in well_df.columns:
+                    vals = well_df[param].dropna()
+                    if len(vals) > 0:
+                        well_avgs[param] = float(np.mean(vals))
+
+            well_avg_data[well] = well_avgs
+            meta_rows.append({
+                "well": well,
+                "treatment": treatment,
+                "combo": combo,
+                "combo_slash": combo_slash
+            })
 
         meta_df = pd.DataFrame(meta_rows)
-        meta_df["combo_slash"] = meta_df["combo"].apply(to_slash_combo)
+
+        if meta_df.empty:
+            print("No wells with valid metadata for dose effect pages")
+            return
 
         # ---------------------------
         # choose which params to plot
         # ---------------------------
-        df = self.dataframe.copy()
-
         if len(parameters_to_plot) == 0:
-            # infer numeric columns (skip obvious non-features)
-            skip = {"well", "Well", "treatment", "combo", "combo_slash"}
-            numeric_cols = [c for c in df.columns if c not in skip and pd.api.types.is_numeric_dtype(df[c])]
-            parameters_to_plot = numeric_cols
+            # infer from available parameters across wells
+            all_params = set()
+            for avgs in well_avg_data.values():
+                all_params.update(avgs.keys())
+            parameters_to_plot = list(all_params)
 
         # ---------------------------
         # main loop: param -> treatment -> plot dose permutations
         # ---------------------------
         for param in parameters_to_plot:
-            if param not in df.columns:
+            if param in ["well", "Well", "treatment", "combo", "combo_slash"]:
                 continue
 
-            # build long table: one row per well with value + meta
-            dfp = df[["well", param]].merge(meta_df, on="well", how="left")
-            dfp = dfp.rename(columns={param: "value"})
-            dfp = dfp.dropna(subset=["value", "treatment", "combo_slash"])
+            # Gather data from wells that have this parameter
+            rows = []
+            for well in self.wells:
+                if well not in well_avg_data:
+                    continue
+                if param not in well_avg_data[well]:
+                    continue
 
-            if dfp.empty:
+                meta_row = meta_df[meta_df["well"] == well]
+                if meta_row.empty:
+                    continue
+
+                rows.append({
+                    "value": well_avg_data[well][param],
+                    "treatment": meta_row.iloc[0]["treatment"],
+                    "combo_slash": meta_row.iloc[0]["combo_slash"],
+                    "well": well
+                })
+
+            if not rows:
+                print(f"Skipping {param}: no valid data")
                 continue
+
+            dfp = pd.DataFrame(rows)
 
             for treatment in sorted(dfp["treatment"].unique().tolist()):
                 dft = dfp[dfp["treatment"] == treatment].copy()
@@ -1306,17 +1606,20 @@ class Batch_Experiment(object):
                     continue
 
                 # determine channel count from combo_slash (count of "/" + 1)
-                max_slashes = int(dft["combo_slash"].str.count("/").max())
-                n_channels = max_slashes + 1
+                if len(dft["combo_slash"]) > 0:
+                    max_slashes = int(dft["combo_slash"].astype(str).str.count("/").max())
+                    n_channels = max_slashes + 1
+                else:
+                    n_channels = 1
 
                 # build the full x-axis list for this channel count
                 xlabels = all_combo_labels(n_channels)
 
-                # aggregate per combo
+                # aggregate per combo (well-level data)
                 agg = (
                     dft.groupby("combo_slash")["value"]
-                    .agg(["mean", "count", "std"])
-                    .reset_index()
+                        .agg(["mean", "count", "std"])
+                        .reset_index()
                 )
                 agg["sem"] = agg["std"] / np.sqrt(agg["count"].clip(lower=1))
 
@@ -1333,22 +1636,172 @@ class Batch_Experiment(object):
                         sem = r["sem"].iloc[0]
                         yerr.append(float(0.0 if pd.isna(sem) else sem))
 
+                # Filter out bars with all NaN values
+                valid_indices = [i for i, val in enumerate(y) if not np.isnan(val)]
+                if not valid_indices:
+                    print(f"Skipping {param} - {treatment}: all NaN values")
+                    continue
+
+                y_valid = [y[i] for i in valid_indices]
+                yerr_valid = [yerr[i] for i in valid_indices]
+                xlabels_valid = [xlabels[i] for i in valid_indices]
+
                 # plot
                 fig, ax = plt.subplots(figsize=(14, 6))
-                x = np.arange(len(xlabels))
-                ax.bar(x, y, yerr=yerr)
+                x = np.arange(len(xlabels_valid))
+                ax.bar(x, y_valid, yerr=yerr_valid)
 
-                ax.set_title(f"{param} — {treatment} (n_channels={n_channels})")
-                ax.set_ylabel(param)
+                ax.set_title(f"{param} - {treatment} (n_channels={n_channels})")
+                ax.set_ylabel(f"{param} {UNIT_DICT.get(param, '')}")
                 ax.set_xticks(x)
-                ax.set_xticklabels(xlabels, rotation=45, ha="right")
+                ax.set_xticklabels(xlabels_valid, rotation=45, ha="right")
 
                 fig.tight_layout()
                 fig.savefig(os.path.join(out_dir, f"{safe_name(param)}__{safe_name(treatment)}.jpg"), dpi=200)
                 plt.close(fig)
 
+    def make_average_page_per_dose_combo(self, parameter, dose_combo=None):
+        """
+        Create average pages (like make_average_page) but for a specific dose_combo permutation.
+        If dose_combo is None, creates pages for each unique permutation.
 
+        Each page includes:
+        - Average over time graph
+        - Average barplot (per treatment or experiment)
 
+        dose_combo example: "NEG", "NEG/POS", "NEG/POS/HIGH"
+        """
+
+        def to_slash_combo(combo_str):
+            parts = str(combo_str).split("__")
+            doses = []
+            for p in parts:
+                if "=" in p:
+                    doses.append(p.split("=")[-1].strip().upper())
+            return "/".join(doses) if doses else "NO_CHANNEL_INFO"
+
+        def safe_name(s):
+            s = str(s)
+            for ch in ["/", "\\", ":", "|", "*", "?", "\"", "<", ">"]:
+                s = s.replace(ch, "_")
+            return s
+
+        # Get all unique dose combos from wells
+        all_combos = set()
+        meta_rows = []
+        for well in self.wells:
+            well_df = self.well_info.get(well, pd.DataFrame())
+            if well_df.empty:
+                continue
+            dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
+            combo = self._dose_combo_str(dose_by_channel)
+            combo_slash = to_slash_combo(combo)
+            all_combos.add(combo_slash)
+            meta_rows.append({"well": well, "combo_slash": combo_slash})
+
+        meta_df = pd.DataFrame(meta_rows)
+
+        # Determine which combos to process
+        combos_to_process = [dose_combo] if dose_combo else sorted(list(all_combos))
+
+        for combo in combos_to_process:
+            # Filter wells that match this combo
+            matching_wells = meta_df[meta_df["combo_slash"] == combo]["well"].tolist()
+            if not matching_wells:
+                continue
+
+            title = f"{parameter} average values - {safe_name(combo)}"
+            output_folder = os.path.join(self.output_path, title)
+            os.makedirs(output_folder, exist_ok=True)
+
+            # Create average over time graph
+            fig_time, ax_time = plt.subplots(figsize=(14, 6))
+
+            # Get time points
+            all_times = set()
+            for well in matching_wells:
+                well_df = self.well_info.get(well, pd.DataFrame())
+                if parameter in well_df.columns:
+                    all_times.update(well_df.TimeIndex.unique())
+
+            if all_times:
+                times_sorted = sorted(list(all_times))
+                times_min = [t * self.dt for t in times_sorted]
+
+                # Aggregate values per time across all matching wells
+                avg_per_time = []
+                std_per_time = []
+                count_per_time = []
+
+                for t in times_sorted:
+                    values = []
+                    for well in matching_wells:
+                        well_df = self.well_info.get(well, pd.DataFrame())
+                        if parameter in well_df.columns:
+                            t_data = well_df[well_df.TimeIndex == t][parameter].dropna()
+                            values.extend(t_data.tolist())
+
+                    if values:
+                        avg_per_time.append(np.mean(values))
+                        std_per_time.append(np.std(values))
+                        count_per_time.append(len(values))
+                    else:
+                        avg_per_time.append(np.nan)
+                        std_per_time.append(0)
+                        count_per_time.append(0)
+
+                # Plot with error bars (SEM)
+                sem_per_time = [s / np.sqrt(max(c, 1)) for s, c in zip(std_per_time, count_per_time)]
+                ax_time.plot(times_min, avg_per_time, linewidth=2, marker='o')
+                ax_time.fill_between(times_min,
+                                     [a - e for a, e in zip(avg_per_time, sem_per_time)],
+                                     [a + e for a, e in zip(avg_per_time, sem_per_time)],
+                                     alpha=0.3)
+
+                ax_time.set_xlabel("Time [min]")
+                ax_time.set_ylabel(f"{parameter} {UNIT_DICT.get(parameter, '')}")
+                ax_time.set_title(f"{parameter} - {combo} - Over Time")
+                fig_time.tight_layout()
+                fig_time.savefig(os.path.join(output_folder, "over_time.jpg"), dpi=200)
+                plt.close(fig_time)
+
+            # Create barplot (grouped by experiment/treatment)
+            fig_bar, ax_bar = plt.subplots(figsize=(14, 6))
+
+            # Compute averages per well for this dose combo
+            well_avgs = {}
+            well_treatments = {}
+            for well in matching_wells:
+                well_df = self.well_info.get(well, pd.DataFrame())
+                if parameter in well_df.columns:
+                    vals = well_df[parameter].dropna()
+                    if len(vals) > 0:
+                        well_avgs[well] = np.mean(vals)
+                        well_treatments[well] = self._treatment_key(well)
+
+            if well_avgs:
+                # Group by treatment
+                treat_data = {}
+                for well, avg_val in well_avgs.items():
+                    treat = well_treatments[well]
+                    if treat not in treat_data:
+                        treat_data[treat] = []
+                    treat_data[treat].append(avg_val)
+
+                treats = sorted(treat_data.keys())
+                means = [np.mean(treat_data[t]) for t in treats]
+                stds = [np.std(treat_data[t]) for t in treats]
+                sems = [s / np.sqrt(max(len(treat_data[t]), 1)) for s, t in zip(stds, treats)]
+
+                x_pos = np.arange(len(treats))
+                ax_bar.bar(x_pos, means, yerr=sems, capsize=5)
+                ax_bar.set_xticks(x_pos)
+                ax_bar.set_xticklabels(treats, rotation=45, ha='right')
+                ax_bar.set_ylabel(f"{parameter} {UNIT_DICT.get(parameter, '')}")
+                ax_bar.set_title(f"{parameter} - {combo} - By Treatment")
+                fig_bar.tight_layout()
+                fig_bar.savefig(os.path.join(output_folder, "barplot.jpg"), dpi=200)
+                plt.close(fig_bar)
 
     def draw_layer_graph(self, well, parameter, output_folder=None, intervals=15, absolute=False, groups=False,
                          fixed_distance=30, scaled=False):
@@ -1378,12 +1831,14 @@ class Batch_Experiment(object):
         graph_ax.set_box_aspect(1)
         if groups:
             graph_ax.set_ylabel(r"Cells grouped by distance from scratch")
-            graph_ax.set_yticks([0] + list(y+0.5) + [intervals])
-            graph_ax.set_yticklabels(["Closest"] + ["Group %d" % (i+1) for i in y] + ["Farthest"])
+            graph_ax.set_yticks([0] + list(y + 0.5) + [intervals])
+            graph_ax.set_yticklabels(["Closest"] + ["Group %d" % (i + 1) for i in y] + ["Farthest"])
         else:
             graph_ax.set_ylabel(r"Distance from scratch [$\mu$m]")
-            graph_ax.set_yticks(list(y+0.5))
-            graph_ax.set_yticklabels(["%d-%d" % (fixed_distance*i, fixed_distance*(i+1)) for i in range(intervals-1)] + [">%d" % (fixed_distance*(intervals-1))])
+            graph_ax.set_yticks(list(y + 0.5))
+            graph_ax.set_yticklabels(
+                ["%d-%d" % (fixed_distance * i, fixed_distance * (i + 1)) for i in range(intervals - 1)] + [
+                    ">%d" % (fixed_distance * (intervals - 1))])
         total = 0
         for minute in x:
             scratch_top, scratch_bottom, top_interval, bottom_interval = scratch_info_per_time[int(minute / self.dt)]
@@ -1397,10 +1852,11 @@ class Batch_Experiment(object):
             for multiplier in y:
                 top_group = time_df[time_df.y_Pos >= scratch_top + (multiplier * top_interval)]
                 if multiplier != y[-1]:
-                    top_group = top_group[top_group.y_Pos < scratch_top + ((multiplier+1) * top_interval)]
+                    top_group = top_group[top_group.y_Pos < scratch_top + ((multiplier + 1) * top_interval)]
                 bottom_group = time_df[time_df.y_Pos <= scratch_bottom - (multiplier * bottom_interval)]
                 if multiplier != y[-1]:
-                    bottom_group = bottom_group[bottom_group.y_Pos > scratch_bottom - ((multiplier+1) * bottom_interval)]
+                    bottom_group = bottom_group[
+                        bottom_group.y_Pos > scratch_bottom - ((multiplier + 1) * bottom_interval)]
                 time_total += len(top_group) + len(bottom_group)
                 top_group = top_group[parameter]
                 bottom_group = bottom_group[parameter]
@@ -1411,7 +1867,8 @@ class Batch_Experiment(object):
                     avg_val = (sum(top_group) + sum(bottom_group)) / (len(top_group) + len(bottom_group))
                 except ZeroDivisionError:
                     avg_val = 0
-                rect = patches.Rectangle((minute, multiplier), width=self.dt, height=1, color=cm.jet(normalized(avg_val)))
+                rect = patches.Rectangle((minute, multiplier), width=self.dt, height=1,
+                                         color=cm.jet(normalized(avg_val)))
                 graph_ax.add_patch(rect)
             if time_total == len(time_df):
                 total += time_total
@@ -1457,13 +1914,14 @@ class Batch_Experiment(object):
                 self.draw_layer_graph(well, parameter, output_folder=output_folder, absolute=absolute, scaled=scaled)
             self.pdf.image(os.path.join(output_folder, well + ".jpg"),
                            x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
-        #self.new_page(title + " by groups")
-        #for i in range(self.well_amount):
+        # self.new_page(title + " by groups")
+        # for i in range(self.well_amount):
         #    well = self.wells[i]
         #    self.draw_layer_graph(well, parameter, output_folder=output_folder, absolute=absolute, groups=True, scaled=scaled)
         #    self.pdf.image(os.path.join(output_folder, well + "_groups.jpg"), x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
 
-    def draw_param_vs_param_graph(self, well, parameter1, parameter2, output_folder=None, absolute=False, average=False):
+    def draw_param_vs_param_graph(self, well, parameter1, parameter2, output_folder=None, absolute=False,
+                                  average=False):
         fig, graph_ax = plt.subplots()
         if well == "overlayed":
             wells = self.wells
@@ -1528,7 +1986,8 @@ class Batch_Experiment(object):
             if absolute:
                 x = np.absolute(x)
                 y = np.absolute(y)
-            sc = graph_ax.scatter(x, y, c=c, s=size, vmin=min_time, vmax=max_time, marker=marker, cmap="jet", label=self.shortened_well_names[wells[i]])
+            sc = graph_ax.scatter(x, y, c=c, s=size, vmin=min_time, vmax=max_time, marker=marker, cmap="jet",
+                                  label=self.shortened_well_names[wells[i]])
         colorbar = fig.colorbar(cm.ScalarMappable(norm=normalized, cmap="jet"), ax=graph_ax)
         colorbar.set_label(cb_label)
         if well == "overlayed":
@@ -1581,7 +2040,8 @@ class Batch_Experiment(object):
 
     def draw_wave_percentage(self, output_folder=None):
         fig, graph_ax = plt.subplots()
-        graph_ax.set_title("%d%s - Percent of cells with wave properties" % (self.pdf.page_no(), chr(self.graph_counter)))
+        graph_ax.set_title(
+            "%d%s - Percent of cells with wave properties" % (self.pdf.page_no(), chr(self.graph_counter)))
         self.graph_counter += 1
         if self.graph_counter == 123:
             self.graph_counter = 65
@@ -1609,29 +2069,44 @@ class Batch_Experiment(object):
                     right_sided_wave_cells[i] += 1
                 else:
                     full_wave_cells[i] += 1
-            if full_wave_cells[i] + left_sided_wave_cells[i] + right_sided_wave_cells[i] + no_wave_cells[i] != total_cells[i]:
-                print(full_wave_cells[i], left_sided_wave_cells[i], right_sided_wave_cells[i], no_wave_cells[i], total_cells[i])
+            if full_wave_cells[i] + left_sided_wave_cells[i] + right_sided_wave_cells[i] + no_wave_cells[i] != \
+                    total_cells[i]:
+                print(full_wave_cells[i], left_sided_wave_cells[i], right_sided_wave_cells[i], no_wave_cells[i],
+                      total_cells[i])
                 print(full_wave_cells, left_sided_wave_cells[i], right_sided_wave_cells[i], no_wave_cells, total_cells)
                 raise ValueError("Unexpected issue with wave parameters - something didn't add up.")
         x = range(self.well_amount)
         rects1 = graph_ax.bar(x, 100 * full_wave_cells / total_cells, color="tab:blue", label="Full wave found")
-        rects2 = graph_ax.bar(x, 100 * left_sided_wave_cells / total_cells, color="tab:orange", label="Left sided wave found", bottom=[rect.get_height() + rect.get_y() for rect in rects1])
-        rects3 = graph_ax.bar(x, 100 * right_sided_wave_cells / total_cells, color="tab:red", label="Right sided wave found", bottom=[rect.get_height() + rect.get_y() for rect in rects2])
-        rects4 = graph_ax.bar(x, 100 * no_wave_cells / total_cells, color="tab:green", label="No wave found", bottom=[rect.get_height() + rect.get_y() for rect in rects3])
+        rects2 = graph_ax.bar(x, 100 * left_sided_wave_cells / total_cells, color="tab:orange",
+                              label="Left sided wave found",
+                              bottom=[rect.get_height() + rect.get_y() for rect in rects1])
+        rects3 = graph_ax.bar(x, 100 * right_sided_wave_cells / total_cells, color="tab:red",
+                              label="Right sided wave found",
+                              bottom=[rect.get_height() + rect.get_y() for rect in rects2])
+        rects4 = graph_ax.bar(x, 100 * no_wave_cells / total_cells, color="tab:green", label="No wave found",
+                              bottom=[rect.get_height() + rect.get_y() for rect in rects3])
         for i in range(self.well_amount):
             graph_ax.annotate("%d\n(%.2f" % (full_wave_cells[i], 100 * full_wave_cells[i] / total_cells[i]) + "%)",
-                        xy=(rects1[i].get_x() + (rects1[i].get_width() / 2), rects1[i].get_y() + (rects1[i].get_height() / 2)), ha="center", va="center", rotation=90)
-            graph_ax.annotate("%d\n(%.2f" % (left_sided_wave_cells[i], 100 * left_sided_wave_cells[i] / total_cells[i]) + "%)",
-                        xy=(rects2[i].get_x() + (rects2[i].get_width() / 2), rects2[i].get_y() + (rects2[i].get_height() / 2)), ha="center", va="center", rotation=90)
-            graph_ax.annotate("%d\n(%.2f" % (right_sided_wave_cells[i], 100 * right_sided_wave_cells[i] / total_cells[i]) + "%)",
-                        xy=(rects3[i].get_x() + (rects3[i].get_width() / 2), rects3[i].get_y() + (rects3[i].get_height() / 2)), ha="center", va="center", rotation=90)
+                              xy=(rects1[i].get_x() + (rects1[i].get_width() / 2),
+                                  rects1[i].get_y() + (rects1[i].get_height() / 2)), ha="center", va="center",
+                              rotation=90)
+            graph_ax.annotate(
+                "%d\n(%.2f" % (left_sided_wave_cells[i], 100 * left_sided_wave_cells[i] / total_cells[i]) + "%)",
+                xy=(rects2[i].get_x() + (rects2[i].get_width() / 2), rects2[i].get_y() + (rects2[i].get_height() / 2)),
+                ha="center", va="center", rotation=90)
+            graph_ax.annotate(
+                "%d\n(%.2f" % (right_sided_wave_cells[i], 100 * right_sided_wave_cells[i] / total_cells[i]) + "%)",
+                xy=(rects3[i].get_x() + (rects3[i].get_width() / 2), rects3[i].get_y() + (rects3[i].get_height() / 2)),
+                ha="center", va="center", rotation=90)
             graph_ax.annotate("%d\n(%.2f" % (no_wave_cells[i], 100 * no_wave_cells[i] / total_cells[i]) + "%)",
-                        xy=(rects4[i].get_x() + (rects4[i].get_width() / 2), rects4[i].get_y() + (rects4[i].get_height() / 2)), ha="center", va="center", rotation=90)
+                              xy=(rects4[i].get_x() + (rects4[i].get_width() / 2),
+                                  rects4[i].get_y() + (rects4[i].get_height() / 2)), ha="center", va="center",
+                              rotation=90)
         x_tick_labels = [self.shortened_well_names[well] for well in self.wells]
         graph_ax.set_xticks(x)
         graph_ax.set_xticklabels(x_tick_labels, rotation=45, ha="right")
         graph_ax.set_box_aspect(1)
-        graph_ax.legend(bbox_to_anchor=(1,0.5), loc="center left")
+        graph_ax.legend(bbox_to_anchor=(1, 0.5), loc="center left")
         fig.tight_layout()
         if output_folder:
             fig.savefig(os.path.join(output_folder, "wave_percentage.jpg"))
@@ -1649,39 +2124,51 @@ class Batch_Experiment(object):
         self.new_page(title)
         if not os.path.exists(os.path.join(output_folder, "wave_percentage.jpg")):
             self.draw_wave_percentage(output_folder)
-        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=EIGHT_GRAPH_X[0], y=EIGHT_GRAPH_Y[0], w=EIGHT_GRAPH_WIDTH)
+        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=EIGHT_GRAPH_X[0], y=EIGHT_GRAPH_Y[0],
+                       w=EIGHT_GRAPH_WIDTH)
         for i in range(7):
             parameter = WAVE_PARAMETERS[i]
             if not os.path.exists(os.path.join(output_folder, parameter + ".jpg")):
-                self.draw_average_barplot(parameter, output_folder=output_folder, wave="all", alt_name=parameter, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=EIGHT_GRAPH_X[i+1], y=EIGHT_GRAPH_Y[i+1], w=EIGHT_GRAPH_WIDTH)
+                self.draw_average_barplot(parameter, output_folder=output_folder, wave="all", alt_name=parameter,
+                                          per_cell=True)
+            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=EIGHT_GRAPH_X[i + 1],
+                           y=EIGHT_GRAPH_Y[i + 1], w=EIGHT_GRAPH_WIDTH)
         title = "Wave properties - only double sided waves"
         self.new_page(title)
-        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=EIGHT_GRAPH_X[0], y=EIGHT_GRAPH_Y[0], w=EIGHT_GRAPH_WIDTH)
+        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=EIGHT_GRAPH_X[0], y=EIGHT_GRAPH_Y[0],
+                       w=EIGHT_GRAPH_WIDTH)
         for i in range(7):
             parameter = WAVE_PARAMETERS[i]
             alt_name = parameter + "_double"
             if not os.path.exists(os.path.join(output_folder, alt_name + ".jpg")):
-                self.draw_average_barplot(parameter, output_folder=output_folder, wave="double", alt_name=alt_name, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=EIGHT_GRAPH_X[i+1], y=EIGHT_GRAPH_Y[i+1], w=EIGHT_GRAPH_WIDTH)
+                self.draw_average_barplot(parameter, output_folder=output_folder, wave="double", alt_name=alt_name,
+                                          per_cell=True)
+            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=EIGHT_GRAPH_X[i + 1],
+                           y=EIGHT_GRAPH_Y[i + 1], w=EIGHT_GRAPH_WIDTH)
         title = "Wave properties - only left sided waves"
         self.new_page(title)
-        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=SIX_GRAPH_X[0], y=SIX_GRAPH_Y[0], w=FOUR_GRAPH_WIDTH)
+        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=SIX_GRAPH_X[0], y=SIX_GRAPH_Y[0],
+                       w=FOUR_GRAPH_WIDTH)
         for i in range(5):
             parameter = LEFT_WAVE_PARAMETERS[i]
             alt_name = parameter + "_left"
             if not os.path.exists(os.path.join(output_folder, alt_name + ".jpg")):
-                self.draw_average_barplot(parameter, output_folder=output_folder, wave="left", alt_name=alt_name, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=SIX_GRAPH_X[i+1], y=SIX_GRAPH_Y[i+1], w=FOUR_GRAPH_WIDTH)
+                self.draw_average_barplot(parameter, output_folder=output_folder, wave="left", alt_name=alt_name,
+                                          per_cell=True)
+            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=SIX_GRAPH_X[i + 1], y=SIX_GRAPH_Y[i + 1],
+                           w=FOUR_GRAPH_WIDTH)
         title = "Wave properties - only right sided waves"
         self.new_page(title)
-        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=SIX_GRAPH_X[0], y=SIX_GRAPH_Y[0], w=FOUR_GRAPH_WIDTH)
+        self.pdf.image(os.path.join(output_folder, "wave_percentage.jpg"), x=SIX_GRAPH_X[0], y=SIX_GRAPH_Y[0],
+                       w=FOUR_GRAPH_WIDTH)
         for i in range(5):
             parameter = RIGHT_WAVE_PARAMETERS[i]
             alt_name = parameter + "_right"
             if not os.path.exists(os.path.join(output_folder, alt_name + ".jpg")):
-                self.draw_average_barplot(parameter, output_folder=output_folder, wave="right", alt_name=alt_name, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=SIX_GRAPH_X[i+1], y=SIX_GRAPH_Y[i+1], w=FOUR_GRAPH_WIDTH)
+                self.draw_average_barplot(parameter, output_folder=output_folder, wave="right", alt_name=alt_name,
+                                          per_cell=True)
+            self.pdf.image(os.path.join(output_folder, alt_name + ".jpg"), x=SIX_GRAPH_X[i + 1], y=SIX_GRAPH_Y[i + 1],
+                           w=FOUR_GRAPH_WIDTH)
 
     def make_displacement_page(self):
         title = "Displacement information"
@@ -1703,7 +2190,8 @@ class Batch_Experiment(object):
             parameter = displacement_params[i]
             if not os.path.exists(os.path.join(output_folder, parameter + ".jpg")):
                 self.draw_average_barplot(parameter, output_folder=output_folder, alt_name=parameter, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=x_coords[i], y=y_coords[i], w=FOUR_GRAPH_WIDTH)
+            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=x_coords[i], y=y_coords[i],
+                           w=FOUR_GRAPH_WIDTH)
 
     def make_motility_page(self):
         title = "Cell motility properties"
@@ -1717,7 +2205,8 @@ class Batch_Experiment(object):
             parameter = MOTILITY_PARAMS[i]
             if not os.path.exists(os.path.join(output_folder, parameter + ".jpg")):
                 self.draw_average_barplot(parameter, output_folder=output_folder, alt_name=parameter, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=FOUR_GRAPH_X[i], y=FOUR_GRAPH_Y[i], w=FOUR_GRAPH_WIDTH)
+            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=FOUR_GRAPH_X[i], y=FOUR_GRAPH_Y[i],
+                           w=FOUR_GRAPH_WIDTH)
 
     def draw_msd(self, well, output_folder=None):
         fig, graph_ax = plt.subplots()
@@ -1775,18 +2264,21 @@ class Batch_Experiment(object):
             parameter = MSD_PARAMS[i]
             if not os.path.exists(os.path.join(output_folder, parameter + ".jpg")):
                 self.draw_average_barplot(parameter, output_folder=output_folder, alt_name=parameter, per_cell=True)
-            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=SIX_GRAPH_X[i], y=SIX_GRAPH_Y[i], w=FOUR_GRAPH_WIDTH)
+            self.pdf.image(os.path.join(output_folder, parameter + ".jpg"), x=SIX_GRAPH_X[i], y=SIX_GRAPH_Y[i],
+                           w=FOUR_GRAPH_WIDTH)
         self.new_page("MSD graphs per well", table=True)
         for i in range(self.well_amount):
             well = self.wells[i]
             if not os.path.exists(os.path.join(output_folder, well + ".jpg")):
                 self.draw_msd(well, output_folder=output_folder)
-            self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i], y=self.graph_y_coords[i], w=self.graph_width)
+            self.pdf.image(os.path.join(output_folder, well + ".jpg"), x=self.graph_x_coords[i],
+                           y=self.graph_y_coords[i], w=self.graph_width)
         self.new_page("Average MSD")
         if not os.path.exists(os.path.join(output_folder, "average_msds.jpg")):
             self.draw_average_msd(output_folder=output_folder)
         self.pdf.image(os.path.join(output_folder, "average_msds.jpg"),
                        x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
+
 
     def draw_cluster_analysis(self, output_folder=None):
         avg_df = pd.DataFrame(index=self.wells, columns=self.parameters)
@@ -1794,13 +2286,13 @@ class Batch_Experiment(object):
         for well in self.wells:
             well_df = self.well_info[well]
             for parameter in CLUSTER_ID_FIELDS:
-                if parameter in self.parameters and parameter in well_df.columns:
+                if parameter in self.parameters:
                     parameter_array = well_df[parameter].dropna()
                     avg_df.loc[well, parameter] = np.average(parameter_array)
             cells = well_df.Parent.unique()
             well_df = well_df.set_index("Parent")
             for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
-                if parameter in self.parameters and parameter in well_df.columns:
+                if parameter in self.parameters:
                     values = np.array([0.0] * len(cells))
                     for i in range(len(cells)):
                         try:
@@ -1811,57 +2303,19 @@ class Batch_Experiment(object):
                         values = values[values.nonzero()]
                     values = pd.Index(values).dropna()
                     avg_df.loc[well, parameter] = np.average(values)
-
-        # Drop columns and rows with any non-finite values
-        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
-        avg_df = avg_df.replace([np.inf, -np.inf], np.nan)
-        avg_df = avg_df.dropna(axis=1, how='any')  # Drop columns with any NaN
-        avg_df = avg_df.dropna(axis=0, how='any')  # Drop rows with any NaN
-        if avg_df.shape[0] < 2 or avg_df.shape[1] < 2:
-            print("Not enough data for clustering after dropping NaNs.")
-            return
         scaler = StandardScaler(with_std=True)
-        avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns, index=[self.shortened_well_names[w] for w in avg_df.index])
+        avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns,
+                              index=[self.shortened_well_names[w] for w in avg_df.index])
         linkaged_pca = linkage(avg_df, "ward")
-        # build row_colors based on inferred combos
-        row_labels = list(avg_df.index)  # current row labels
-
-        short_to_full = {self.shortened_well_names[w]: w for w in self.wells if w in self.shortened_well_names}
-        combos = []
-        for short in row_labels:
-            full = short_to_full.get(short, None)
-            if full is None:
-                combos.append("NO_META")
-                continue
-            d = self._infer_dose_by_channel_from_df(self.well_info[full])
-            combos.append(self._dose_combo_str(d))
-
-        combo_cat = pd.Series(combos, index=row_labels).astype("category")
-        combo_colors = dict(zip(combo_cat.cat.categories, sns.color_palette("Set3", len(combo_cat.cat.categories))))
-        # --- fix: avoid MultiIndex categories in pandas map ---
-        combo_cat_str = pd.Series(combo_cat, index=row_labels).astype(str)
-        combo_colors_str = {str(k): v for k, v in combo_colors.items()}
-
-        row_colors = pd.DataFrame(
-            {"dose_combo": combo_cat_str.map(combo_colors_str)},
-            index=row_labels
-        )
-
-        s = sns.clustermap(
-                            data=avg_df,
-                            row_linkage=linkaged_pca,
-                            row_colors=row_colors,
-                            cmap=sns.color_palette("coolwarm", n_colors=256),
-                            vmin=-2, vmax=2, figsize=(30, 15),
-                            cbar_kws=dict(use_gridspec=False),
-                        )
-
-        #s.ax_heatmap.set_xlabel("Parameters", fontsize=25, fontweight='bold')
-        #s.ax_heatmap.set_ylabel("Well", fontsize=25, fontweight='bold')
-        #s.cax.set_yticklabels(s.cax.get_yticklabels());
-        #pos = s.ax_heatmap.get_position();
-        #cbar = s.cax
-        #cbar.set_position([0.02, pos.bounds[1], 0.02, pos.bounds[3]]);
+        s = sns.clustermap(data=avg_df, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
+                           vmin=-2, vmax=2, figsize=(30, 15),
+                           cbar_kws=dict(use_gridspec=False))
+        # s.ax_heatmap.set_xlabel("Parameters", fontsize=25, fontweight='bold')
+        # s.ax_heatmap.set_ylabel("Well", fontsize=25, fontweight='bold')
+        # s.cax.set_yticklabels(s.cax.get_yticklabels());
+        # pos = s.ax_heatmap.get_position();
+        # cbar = s.cax
+        # cbar.set_position([0.02, pos.bounds[1], 0.02, pos.bounds[3]]);
         s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
         if output_folder:
             plt.savefig(os.path.join(output_folder, "clustermap.jpg"))
@@ -1869,6 +2323,162 @@ class Batch_Experiment(object):
         else:
             plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
             plt.show()
+
+    def draw_cluster_analysis_by_treatment_dose(self, output_folder=None):
+        indexes = []
+        well_combos = {}
+        for well in self.wells:
+            well_combos[well] = self._infer_dose_by_channel_from_df(self.well_info[well])
+
+        print("\n=== DEBUG combos ===")
+        print("num wells:", len(self.wells))
+
+        lens = {w: len(well_combos[w]) for w in self.wells}
+        print("combos per well (min/mean/max):",
+              min(lens.values()) if lens else None,
+              (sum(lens.values()) / len(lens)) if lens else None,
+              max(lens.values()) if lens else None)
+
+        # print a few examples
+        for w in list(self.wells):
+            print("well:", w)
+            print("  columns present:",
+                  [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in self.well_info[w].columns])
+            print(" combos:", well_combos[w][:10])
+
+        for well in self.wells:
+            for combo in well_combos[well]:
+                indexes.append(f"{well}_{combo}")
+
+        print("\n=== DEBUG indexes ===")
+        print("num indexes:", len(indexes))
+        print("first 10 indexes:", indexes[:10])
+        print("last 10 indexes:", indexes[-10:])
+
+        avg_df = pd.DataFrame(index=indexes, columns=self.parameters)
+        avg_df.drop(columns=CLUSTER_DROP_FIELDS, inplace=True, errors="ignore")
+        for well in self.wells:
+            well_df = self.well_info[well]
+            for combo in well_combos[well]:
+                combo_list = combo.split("_")  # get only dose part
+                filtered_df = None
+                if len(combo_list) == 1:
+                    filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0])]
+                elif len(combo_list) == 2:
+                    filtered_df = well_df[
+                        (well_df['Cha1_Category'] == combo_list[0]) & (well_df['Cha2_Category'] == combo_list[1])]
+                elif len(combo_list) == 3:
+                    filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0]) &
+                                          (well_df['Cha2_Category'] == combo_list[1]) &
+                                          (well_df['Cha3_Category'] == combo_list[2])]
+                else:
+                    raise ValueError("wrong number of channels in combo for clustering.")
+                if filtered_df.empty: continue
+                for parameter in CLUSTER_ID_FIELDS:
+                    if parameter in self.parameters:
+                        parameter_array = filtered_df[parameter].dropna()
+                        avg_df.loc[f"{well}_{combo}", parameter] = np.average(parameter_array)
+                cells = filtered_df.Parent.unique()
+                indexed_filtered = filtered_df.set_index("Parent")
+                for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
+                    if parameter in self.parameters:
+                        cell_data = indexed_filtered[parameter].groupby(level=0).first()
+
+                        if parameter in CLUSTER_WAVE_FIELDS:
+                            cell_data = cell_data[cell_data != 0]
+
+                        avg_df.loc[f"{well}_{combo}", parameter] = cell_data.mean()
+        scaler = StandardScaler(with_std=True)
+
+        new_index = []
+        for old_idx in avg_df.index:
+            well_part, combo_part = old_idx.split("_", 1)
+            short_name = self.shortened_well_names.get(well_part, well_part)
+            new_index.append(f"{short_name}_{combo_part}")
+
+        if avg_df.shape[0] == 0:
+            print("No (well, combo) indexes were generated -> skipping clustering page")
+            return
+
+        avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns,
+                              index=new_index)
+        linkaged_pca = linkage(avg_df, "ward")
+
+
+
+        # ---- category colors (fixed, always same) ----
+        cat_color = {
+            "Neg": "#1f77b4",
+            "Pos": "#ff7f0e",
+            "High": "#d62728",
+            "NA": "#bbbbbb"
+        }
+
+        row_names = list(avg_df.index)  # these are your plotted rows: "<exp>_<combo>"
+
+        # experiment = text before first "_" in the row label
+        exp_names = [rn.split("_", 1)[0] for rn in row_names]
+        unique_exps = sorted(set(exp_names))
+
+        # give each experiment a unique color
+        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_exps)))
+        exp_color = {e: exp_palette[i] for i, e in enumerate(unique_exps)}
+
+        exp_colors = pd.Series([exp_color[e] for e in exp_names], index=row_names, name="Experiment")
+
+        def parse_combo(rn: str):
+            _, combo = rn.split("_", 1)
+            parts = combo.split("_")
+            parts = (parts + ["NA", "NA", "NA"])[:3]
+            return parts[0], parts[1], parts[2]
+
+        cha1_colors = pd.Series([cat_color.get(parse_combo(rn)[0], cat_color["NA"]) for rn in row_names],
+                                index=row_names, name="Cha1")
+        cha2_colors = pd.Series([cat_color.get(parse_combo(rn)[1], cat_color["NA"]) for rn in row_names],
+                                index=row_names, name="Cha2")
+        cha3_colors = pd.Series([cat_color.get(parse_combo(rn)[2], cat_color["NA"]) for rn in row_names],
+                                index=row_names, name="Cha3")
+
+        row_colors = pd.concat([exp_colors, cha1_colors, cha2_colors, cha3_colors], axis=1)
+
+        s = sns.clustermap(data=avg_df, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
+                           vmin=-2, vmax=2, figsize=(30, 15),
+                           cbar_kws=dict(use_gridspec=False),
+                           row_colors=row_colors)
+        # s.ax_heatmap.set_xlabel("Parameters", fontsize=25, fontweight='bold')
+        # s.ax_heatmap.set_ylabel("Well", fontsize=25, fontweight='bold')
+        # s.cax.set_yticklabels(s.cax.get_yticklabels());
+        # pos = s.ax_heatmap.get_position();
+        # cbar = s.cax
+        # cbar.set_position([0.02, pos.bounds[1], 0.02, pos.bounds[3]]);
+
+        handles = []
+
+        # experiment legend (one entry per experiment)
+        for e in unique_exps:
+            handles.append(patches.Patch(facecolor=exp_color[e], label=f"Exp: {e}"))
+
+        # category legend (fixed mapping)
+        for k in ["Neg", "Pos", "High", "NA"]:
+            handles.append(patches.Patch(facecolor=cat_color[k], label=k))
+
+        s.ax_heatmap.legend(
+            handles=handles,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),  # puts legend to the right of the heatmap
+            borderaxespad=0,
+            fontsize=8
+        )
+
+        s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
+
+        if output_folder:
+            plt.savefig(os.path.join(output_folder, "clustermap_treatment_dose.jpg"))
+            plt.close()
+        else:
+            plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
+            plt.show()
+
 
     def make_cluster_page(self):
         title = "Cluster Analysis"
@@ -1878,9 +2488,20 @@ class Batch_Experiment(object):
         except FileExistsError:
             pass
         self.new_page(title)
+
+        # Original clustering (by dose combo alone)
         if not os.path.exists(os.path.join(output_folder, "clustermap.jpg")):
             self.draw_cluster_analysis(output_folder=output_folder)
         self.pdf.image(os.path.join(output_folder, "clustermap.jpg"), x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
+
+        self.add_category_to_well_info()
+        # New page for treatment + dose clustering
+        self.new_page("Cluster Analysis - by Treatment + Dose")
+        if not os.path.exists(os.path.join(output_folder, "clustermap_treatment_dose.jpg")):
+            self.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder)
+        self.pdf.image(os.path.join(output_folder, "clustermap_treatment_dose.jpg"), x=0, y=30, w=WORKING_WIDTH,
+                       h=WORKING_HEIGHT)
+
 
     def load_dicts(self, output_path):
         try:
@@ -1907,7 +2528,8 @@ class Batch_Experiment(object):
                     json.dump(temp_dict, f, default=lambda x: x.__dict__)
             except FileNotFoundError:
                 with open(dict_file, "w") as f:
-                    json.dump(self.__dict__[dict_name], f, default=lambda x: float(x) if type(x) == np.float64 else x.__dict__)
+                    json.dump(self.__dict__[dict_name], f,
+                              default=lambda x: float(x) if type(x) == np.float64 else x.__dict__)
 
     def make_dose_effect_pdf_pages(self):
         """
@@ -1943,7 +2565,7 @@ class Batch_Experiment(object):
             for start in range(0, len(files), 8):
                 chunk = files[start:start + 8]
 
-                title = f"dose effects — {param}"
+                title = f"dose effects - {param}"
                 if start > 0:
                     title += " (continued)"
                 self.new_page(title)
@@ -1954,13 +2576,11 @@ class Batch_Experiment(object):
                         continue
                     self.pdf.image(path, x=EIGHT_GRAPH_X[i], y=EIGHT_GRAPH_Y[i], w=EIGHT_GRAPH_WIDTH)
 
-
-
     def create_output(self, output_path, param_graphs=PARAM_GRAPHS, param_pair_graphs=PARAM_PAIR_GRAPHS):
         pr = cProfile.Profile()
         pr.enable()
         print(self.exp_name + " graphs:")
-        #self.load_dicts(output_path)
+        # self.load_dicts(output_path)
         self.create_pdf_file()
         already_run = self.make_output_folders(output_path)
         if already_run == "ALL":
@@ -1983,7 +2603,8 @@ class Batch_Experiment(object):
                         self.make_y_pos_time_page(parameter, log=True)
                     if "absolute_y_pos_time" in param_graphs[parameter]:
                         self.make_y_pos_time_page(parameter, absolute=True)
-                    if "y_pos_time_scaled" in param_graphs[parameter] and "absolute_y_pos_time" in param_graphs[parameter]:
+                    if "y_pos_time_scaled" in param_graphs[parameter] and "absolute_y_pos_time" in param_graphs[
+                        parameter]:
                         self.make_y_pos_time_page(parameter, absolute=True, scaled=True)
                 if "average" in param_graphs[parameter]:
                     self.make_average_page(parameter)
@@ -2012,7 +2633,9 @@ class Batch_Experiment(object):
                     self.make_param_vs_param_page(parameter1, parameter2, average=True, absolute=absolute)
         print("\tMaking dose effect pages...")
         self.make_dose_effect_pages()
-        self.make_dose_effect_pdf_pages() 
+        self.make_dose_effect_pdf_pages()
+        print("\tMaking average pages per dose combo...")
+        self.make_pdf_pages_average_per_dose_combo()
         print("\tMaking last pages...")
         self.make_wave_pages()
         self.make_displacement_page()
@@ -2021,11 +2644,11 @@ class Batch_Experiment(object):
         self.make_MSD_pages()
         print("\tMaking cluster page...")
         self.make_cluster_page()
-        
+
         print("\tFinal steps...")
 
         self.pdf.output(os.path.join(output_path, self.exp_name + "_report.pdf"))
-        #self.dump_dicts(output_path)
+        # self.dump_dicts(output_path)
 
         average_df.to_excel(output_path + "\\average_parameter_values.xlsx")
 
@@ -2033,9 +2656,11 @@ class Batch_Experiment(object):
         s = io.StringIO()
         ps = pstats.Stats(pr, stream=s).sort_stats('tottime')
         ps.print_stats()
-        log_path = os.path.join(r'\\metlab25\d\pybatch\logs\ori_logs', time.strftime("%Y%m%d%H%M%S_cprofile.log", time.localtime()))
+        log_path = os.path.join(r'\\metlab24\d\jeries\pybatch\logs\ori_logs',
+                                time.strftime("%Y%m%d%H%M%S_cprofile.log", time.localtime()))
         with open(log_path, "w") as f:
             f.write(s.getvalue())
+
 
 def parse_xls2(xls2_path, scratch, dt):
     xls2 = xlrd.open_workbook(xls2_path).sheet_by_index(0)
@@ -2048,10 +2673,11 @@ def parse_xls2(xls2_path, scratch, dt):
         if exp_name not in ["NNN0", ""]:
             if exp_names.count(exp_name) > 1:
                 exp_name += "_%d" % i
-            row_values = xls2.row_values(4+i, start_colx=2, end_colx=27)
+            row_values = xls2.row_values(4 + i, start_colx=2, end_colx=27)
             exp_sub_name = row_values[0]
             wells = [well for well in row_values[1:] if well != "NNN0"]
-            experiments.append(Batch_Experiment(exp_name, exp_sub_name, wells, scratch, protocol_file, incucyte_files, imaris_xls_files, dt=dt))
+            experiments.append(Batch_Experiment(exp_name, exp_sub_name, wells, scratch, protocol_file, incucyte_files,
+                                                imaris_xls_files, dt=dt))
     return experiments
 
 
@@ -2062,9 +2688,9 @@ def load_from_pyobject(summary_table, exp_name, exp_sub_name, wells, scratch=Fal
 
 
 def load_info_old(xls2_path=r"\\metlab24\d\orimosko\yossi_chemo_exps\EXP120\xls2\2_YLEXP120_ExperimentLayoutV1.xlsm",
-                                            summary_table_path=r"E:\orimosko\pybatch_output\YL120_summary_table.xlsx",
-                                            scratch=True,
-                                            dt=45):
+                  summary_table_path=r"E:\orimosko\pybatch_output\YL120_summary_table.xlsx",
+                  scratch=True,
+                  dt=45):
     """
     This function loads info from experiments with the old xls2 and summary table formats
     """
@@ -2081,13 +2707,12 @@ def main(xls2_path=None, summary_table_path=None):
     if xls2_path and summary_table_path:
         experiments = load_info_old(xls2_path, summary_table_path)
 
-
 ########### MAYBE TAKE FUNCTIONS OUT OF CLASS #############
 
-#exps = load_info_old()
-#for exp in exps:
+# exps = load_info_old()
+# for exp in exps:
 #    exp.create_output(r"E:\orimosko\pybatch_output\exp120\graphs")
-#exp = load_from_pyobject(summary_table, "The effect of Siltuximab on group cell motility", 'G.0',
+# exp = load_from_pyobject(summary_table, "The effect of Siltuximab on group cell motility", 'G.0',
 #                         ['YL120CHR1B02SK00CON1NNN0NNN0NNN0NNN0WH00NNN0', 'YL120CHR1B04SK00SIL5NNN0NNN0NNN0NNN0WH00NNN0', 'YL120CHR1B03SK00SIL3NNN0NNN0NNN0NNN0WH00NNN0'])
 
 
