@@ -1259,8 +1259,7 @@ class Batch_Experiment(object):
                 continue
             well_df = well_df.dropna(subset=[parameter])
             well_name = self.shortened_well_names[well]
-            x = well_df.TimeIndex.unique()
-            x.sort()
+            x = np.sort(well_df.TimeIndex.unique())
             vals = [well_df[well_df.TimeIndex == time_index][parameter] for time_index in x]
             x = x * self.dt
             if absolute:
@@ -1817,8 +1816,7 @@ class Batch_Experiment(object):
         min_val, max_val = self._scratch_min_max(parameter, absolute=absolute, groups=groups,
                                                  fixed_distance=fixed_distance, scaled=scaled)
         scratch_info_per_time = self._scratch_info(well, intervals=intervals)
-        x = well_df.TimeIndex.unique() * self.dt
-        x.sort()
+        x = np.sort(well_df.TimeIndex.unique()) * self.dt
         y = np.array(range(intervals))
         normalized = colors.Normalize(vmin=min_val, vmax=max_val)
         graph_ax.set_title("%d%s - " % (self.pdf.page_no(), chr(self.graph_counter)) + well_name)
@@ -1968,8 +1966,7 @@ class Batch_Experiment(object):
             well_df = well_df.dropna(subset=[parameter1, parameter2])
             marker = MARKERS[i]
             if average:
-                c = well_df.TimeIndex.unique() * self.dt
-                c.sort()
+                c = np.sort(well_df.TimeIndex.unique()) * self.dt
                 vals1 = [well_df[well_df.TimeIndex == time_index / self.dt][parameter1] for time_index in c]
                 vals2 = [well_df[well_df.TimeIndex == time_index / self.dt][parameter2] for time_index in c]
                 if absolute:

@@ -238,6 +238,30 @@ def list_names(dir_path: str, recursive: bool = False):
     return sorted([x.name for x in it if x.is_file()])
 
 
+def hex_to_rgba(hex_color):
+    """Convert hex color (with or without alpha) to RGBA tuple."""
+    hex_color = hex_color.lstrip('#')
+    if len(hex_color) == 6:
+        # RGB only
+        return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4)) + (1.0,)
+    elif len(hex_color) == 8:
+        # RGBA
+        return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4, 6))
+    return (0, 0, 0, 1)
+
+
+def abbreviate_combo(combo_str):
+    """Convert combo string like 'Neg_Pos_High' to 'NPH'."""
+    abbrev_map = {
+        "Neg": "N",
+        "Pos": "P",
+        "High": "H",
+        "NA": "A"
+    }
+    parts = combo_str.split("_")
+    return "".join(abbrev_map.get(p, p[0].upper()) for p in parts)
+
+
 class PDF(FPDF):
     pass
 
@@ -1259,8 +1283,7 @@ class Batch_Experiment(object):
                 continue
             well_df = well_df.dropna(subset=[parameter])
             well_name = self.shortened_well_names[well]
-            x = well_df.TimeIndex.unique()
-            x.sort()
+            x = np.sort(well_df.TimeIndex.unique())  # Convert to numpy array and sort
             vals = [well_df[well_df.TimeIndex == time_index][parameter] for time_index in x]
             x = x * self.dt
             if absolute:
@@ -1279,6 +1302,124 @@ class Batch_Experiment(object):
         fig.tight_layout()
         if output_folder:
             fig.savefig(os.path.join(output_folder, "over_time.jpg"))
+            plt.close(fig)
+        else:
+            plt.show()
+
+    def draw_average_over_time_per_dose(self, parameter, output_folder=None, absolute=False):
+        fig, graph_ax = plt.subplots()
+        title = "Average " + parameter + " over time (per Treatment + Dose Combo)"
+        if absolute:
+            title = "Absolute a" + title[1:]
+        graph_ax.set_title("%d%s - " % (self.pdf.page_no(), chr(self.graph_counter)) + title)
+        self.graph_counter += 1
+        if self.graph_counter == 123:
+            self.graph_counter = 65
+        graph_ax.set_xlabel("Time [min]")
+        graph_ax.set_ylabel("Average " + parameter + UNIT_DICT[parameter] + r" (+-$\frac{\sigma}{\sqrt{n}}$)")
+        lines = []
+        well_names = []
+        
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
+            if match:
+                return match.group(1) + match.group(2)  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+        
+        # Group wells by (experiment base, combo) pair
+        treatment_data = {}  # {(exp_base, combo): {timeindex: [values]}}
+        well_combos = {}
+        
+        # First pass: extract combos for each well
+        for well in self.wells:
+            well_df = self.well_info[well]
+            if parameter not in well_df.columns:
+                continue
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+        
+        # Second pass: aggregate data by (treatment_base, combo)
+        for well in self.wells:
+            if well not in well_combos:
+                continue
+            
+            well_df = self.well_info[well].copy()  # Explicit copy to avoid modifying original
+            well_df = well_df.dropna(subset=[parameter])
+            if len(well_df) == 0:
+                continue
+            
+            short_name = self.shortened_well_names[well]
+            exp_base = get_exp_base(short_name)
+            
+            for combo in well_combos[well]:
+                # Filter data for this combo
+                combo_parts = combo.split("_")
+                filtered_df = well_df.copy()
+                
+                if len(combo_parts) >= 1 and "Cha1_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha1_Category"] == combo_parts[0]]
+                if len(combo_parts) >= 2 and "Cha2_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha2_Category"] == combo_parts[1]]
+                if len(combo_parts) >= 3 and "Cha3_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha3_Category"] == combo_parts[2]]
+                
+                if len(filtered_df) == 0:
+                    continue
+                
+                key = (exp_base, combo)
+                if key not in treatment_data:
+                    treatment_data[key] = {}
+                
+                # Aggregate by timeindex
+                x = np.sort(filtered_df.TimeIndex.unique())  # Convert to numpy array and sort
+                
+                for time_index in x:
+                    time_vals = filtered_df[filtered_df.TimeIndex == time_index][parameter]
+                    
+                    if absolute:
+                        time_vals = np.absolute(time_vals)
+                    
+                    if time_index not in treatment_data[key]:
+                        treatment_data[key][time_index] = []
+                    
+                    treatment_data[key][time_index].extend(time_vals.tolist())
+        
+        # Plot each (treatment_base, combo) group
+        sorted_keys = sorted(treatment_data.keys())
+        
+        for color_idx, (exp_base, combo) in enumerate(sorted_keys):
+            time_data = treatment_data[(exp_base, combo)]
+            
+            # Get sorted time indexes
+            x_indices = sorted(time_data.keys())
+            x = np.array(x_indices) * self.dt
+            
+            # Calculate mean and SEM across all values for each timepoint
+            y = [np.average(time_data[ti]) for ti in x_indices]
+            yerr = [np.std(time_data[ti]) / (len(time_data[ti]) ** 0.5) for ti in x_indices]
+            
+            color = LINE_COLORS[color_idx % len(LINE_COLORS)]
+            line = graph_ax.plot(x, y, color=color, marker='o')[0]
+            color = line.get_color()
+            
+            for j in range(len(yerr)):
+                graph_ax.errorbar(x[j], y[j], yerr=yerr[j], ecolor=color)
+            
+            lines.append(line)
+            # Create label showing both treatment and combo
+            label = f"{exp_base}_{combo}"
+            well_names.append(label)
+        
+        if len(lines) <= 10:
+            graph_ax.legend(lines, well_names, fontsize=8)
+        
+        graph_ax.set_box_aspect(1)
+        fig.tight_layout()
+        if output_folder:
+            fig.savefig(os.path.join(output_folder, "over_time_per_dose.jpg"))
             plt.close(fig)
         else:
             plt.show()
@@ -1357,6 +1498,187 @@ class Batch_Experiment(object):
         else:
             plt.show()
 
+    def draw_average_barplot_per_dose(self, parameter, output_folder=None, absolute=False, wave=False, alt_name=None,
+                             per_cell=False):
+        global average_df
+        
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
+            if match:
+                return match.group(1) + match.group(2)
+            return exp_name
+        
+        # First pass: count expected bars to size figure appropriately
+        well_combos = {}
+        expected_bars = 0
+        for well in self.wells:
+            well_df = self.well_info[well]
+            if parameter not in well_df.columns:
+                continue
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+            expected_bars += len(well_combos[well])
+        
+        # Remove duplicates from grouping by treatment base
+        treatment_combo_pairs = set()
+        for well in self.wells:
+            if well not in well_combos:
+                continue
+            short_name = self.shortened_well_names[well]
+            exp_base = get_exp_base(short_name)
+            for combo in well_combos[well]:
+                treatment_combo_pairs.add((exp_base, combo))
+        
+        num_bars = len(treatment_combo_pairs)
+        
+        # Dynamically size figure based on number of bars
+        # Use ~0.5 inches per bar, minimum 8 inches, max reasonable height
+        fig_width = max(8, min(num_bars * 0.6, 24))
+        fig_height = 6
+        fig, graph_ax = plt.subplots(figsize=(fig_width, fig_height))
+        
+        graph_ax.set_title("%d%s - Average " % (self.pdf.page_no(), chr(self.graph_counter)) + parameter + " (per Treatment + Dose Combo)")
+        self.graph_counter += 1
+        if self.graph_counter == 123:
+            self.graph_counter = 65
+        graph_ax.set_xlabel("Treatment + Combo")
+        graph_ax.set_ylabel("Average " + parameter + UNIT_DICT[parameter])
+        
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
+            if match:
+                return match.group(1) + match.group(2)  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+        
+        # Group wells by (experiment base, combo) pair
+        treatment_values = {}  # {(exp_base, combo): [all_values]}
+        well_combos = {}
+        
+        # First pass: extract combos for each well
+        for well in self.wells:
+            well_df = self.well_info[well]
+            if parameter not in well_df.columns:
+                continue
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+        
+        # Second pass: aggregate data by (treatment_base, combo)
+        for well in self.wells:
+            if well not in well_combos:
+                continue
+            
+            well_df = self.well_info[well].copy()  # Explicit copy to avoid modifying original
+            if parameter not in well_df.columns:
+                continue
+            well_df = well_df.dropna(subset=[parameter])
+            if len(well_df) == 0:
+                continue
+            
+            short_name = self.shortened_well_names[well]
+            exp_base = get_exp_base(short_name)
+            
+            for combo in well_combos[well]:
+                # Filter data for this combo
+                combo_parts = combo.split("_")
+                filtered_df = well_df.copy()
+                
+                if len(combo_parts) >= 1 and "Cha1_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha1_Category"] == combo_parts[0]]
+                if len(combo_parts) >= 2 and "Cha2_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha2_Category"] == combo_parts[1]]
+                if len(combo_parts) >= 3 and "Cha3_Category" in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df["Cha3_Category"] == combo_parts[2]]
+                
+                if len(filtered_df) == 0:
+                    continue
+                
+                # Get parameter values from filtered data
+                if per_cell == False:
+                    values = np.array(filtered_df[parameter])
+                else:
+                    cells = filtered_df.Parent.unique()
+                    if wave == "all":
+                        cells = [cell for cell in cells if
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Full_Width_Half_Maximum != 0]
+                    elif wave == "double":
+                        cells = [cell for cell in cells if
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
+                    elif wave == "left":
+                        cells = [cell for cell in cells if
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Starting_Value != 0 and \
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Ending_Value == 0]
+                    elif wave == "right":
+                        cells = [cell for cell in cells if
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Starting_Value == 0 and \
+                                 filtered_df[filtered_df.Parent == cell].iloc[0].Velocity_Ending_Value != 0]
+                    values = [filtered_df[filtered_df.Parent == cell].iloc[0][parameter] for cell in cells]
+                
+                if len(values) == 0:
+                    continue
+                
+                if absolute:
+                    values = np.absolute(values)
+                
+                # Aggregate by (treatment_base, combo)
+                key = (exp_base, combo)
+                if key not in treatment_values:
+                    treatment_values[key] = []
+                treatment_values[key].extend(values)
+        
+        # Build bar plot from aggregated data
+        x = []
+        height = []
+        yerrors = []
+        x_tick_labels = []
+        
+        for idx, (exp_base, combo) in enumerate(sorted(treatment_values.keys())):
+            values = treatment_values[(exp_base, combo)]
+            if len(values) == 0:
+                continue
+            
+            x.append(idx)
+            height.append(np.average(values))
+            yerrors.append(np.std(values) / (len(values) ** 0.5))
+            # Create label showing both treatment and combo
+            label = f"{exp_base}_{combo}"
+            x_tick_labels.append(label)
+
+        graph_ax.bar(x, height, color=LINE_COLORS[:len(x)], yerr=yerrors)
+        graph_ax.set_xticks(x)
+        
+        # Adaptive font size and rotation based on number of bars
+        num_bars = len(x)
+        if num_bars <= 10:
+            fontsize = 10
+            rotation = 45
+        elif num_bars <= 20:
+            fontsize = 8
+            rotation = 45
+        elif num_bars <= 30:
+            fontsize = 7
+            rotation = 90
+        else:  # 30+ bars
+            fontsize = 6
+            rotation = 90
+        
+        graph_ax.set_xticklabels(x_tick_labels, rotation=rotation, ha="right", fontsize=fontsize)
+        graph_ax.set_box_aspect(1)
+        fig.tight_layout()
+        if output_folder:
+            if alt_name:
+                fig.savefig(os.path.join(output_folder, alt_name + "_per_dose.jpg"), dpi=150, bbox_inches='tight')
+            else:
+                fig.savefig(os.path.join(output_folder, "barplot_per_dose.jpg"), dpi=150, bbox_inches='tight')
+            plt.close(fig)
+        else:
+            plt.show()
+
     def make_average_page(self, parameter, absolute=False):
 
         title = parameter + " average values"
@@ -1377,431 +1699,16 @@ class Batch_Experiment(object):
         self.pdf.image(os.path.join(output_folder, "barplot.jpg"), x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1],
                        w=TWO_GRAPH_WIDTH)
 
-    def make_pdf_pages_dose_effect(self, parameters_to_plot=None):
-        """
-        Create PDF pages for dose effect analysis.
-        One graph per (parameter, treatment) showing all dose permutations.
-        """
-        self.make_dose_effect_pages(parameters_to_plot=parameters_to_plot)
+        self.new_page(title + " per dose combo")
+        if not os.path.exists(os.path.join(output_folder, "over_time_per_dose.jpg")):
+            self.draw_average_over_time_per_dose(parameter, output_folder=output_folder, absolute=absolute)
+        self.pdf.image(os.path.join(output_folder, "over_time_per_dose.jpg"), x=TWO_GRAPH_X[0], y=TWO_GRAPH_Y[0],
+                       w=TWO_GRAPH_WIDTH)
+        if not os.path.exists(os.path.join(output_folder, "barplot_per_dose.jpg")):
+            self.draw_average_barplot_per_dose(parameter, output_folder=output_folder, absolute=absolute)
+        self.pdf.image(os.path.join(output_folder, "barplot_per_dose.jpg"), x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1],
+                       w=TWO_GRAPH_WIDTH)
 
-        out_dir = os.path.join(self.output_path, "dose_effect_pages")
-        if not os.path.exists(out_dir):
-            return
-
-        # Get all generated images
-        images = [f for f in os.listdir(out_dir) if f.endswith('.jpg')]
-
-        if not images:
-            return
-
-        images_sorted = sorted(images)
-
-        # Create pages with images (4 per page like standard layout)
-        for i in range(0, len(images_sorted), 4):
-            batch = images_sorted[i:i + 4]
-            self.new_page("Dose Effect Analysis", table=True)
-
-            for j, img_name in enumerate(batch):
-                img_path = os.path.join(out_dir, img_name)
-                if os.path.exists(img_path):
-                    x = FOUR_GRAPH_X[j]
-                    y = FOUR_GRAPH_Y[j]
-                    self.pdf.image(img_path, x=x, y=y, w=FOUR_GRAPH_WIDTH)
-
-    def make_pdf_pages_average_per_dose_combo(self, parameter=None, dose_combos=None):
-        """
-        Create PDF pages for average plots per dose combo permutation.
-        Each page has over_time and barplot for a specific dose combo.
-
-        Args:
-            parameter: specific parameter, or None to process all
-            dose_combos: list of specific combos, or None to auto-detect
-        """
-
-        def to_slash_combo(combo_str):
-            parts = str(combo_str).split("__")
-            doses = []
-            for p in parts:
-                if "=" in p:
-                    doses.append(p.split("=")[-1].strip().upper())
-            return "/".join(doses) if doses else "NO_CHANNEL_INFO"
-
-        # Auto-detect unique dose combos
-        if dose_combos is None:
-            unique_combos = set()
-            for well in self.wells:
-                well_df = self.well_info.get(well, pd.DataFrame())
-                if not well_df.empty:
-                    dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
-                    combo = self._dose_combo_str(dose_by_channel)
-                    combo_slash = to_slash_combo(combo)
-                    unique_combos.add(combo_slash)
-            dose_combos = sorted(list(unique_combos))
-
-        # Determine parameters to process
-        if parameter is None:
-            # Use all parameters from PARAM_GRAPHS + CLUSTER fields
-            params_to_process = list(PARAM_GRAPHS.keys()) + CLUSTER_CELL_FIELDS + CLUSTER_ID_FIELDS
-        else:
-            params_to_process = [parameter]
-
-        # Generate pages for each (parameter, dose_combo) pair
-        for param in params_to_process:
-            for combo in dose_combos:
-                # Generate the average page
-                self.make_average_page_per_dose_combo(param, dose_combo=combo)
-
-                # Add to PDF
-                title = f"{param} average values - {combo}"
-                output_folder = os.path.join(self.output_path, title)
-
-                if os.path.exists(output_folder):
-                    over_time_path = os.path.join(output_folder, "over_time.jpg")
-                    barplot_path = os.path.join(output_folder, "barplot.jpg")
-
-                    if os.path.exists(over_time_path) or os.path.exists(barplot_path):
-                        self.new_page(title)
-
-                        if os.path.exists(over_time_path):
-                            self.pdf.image(over_time_path, x=TWO_GRAPH_X[0], y=TWO_GRAPH_Y[0], w=TWO_GRAPH_WIDTH)
-
-                        if os.path.exists(barplot_path):
-                            self.pdf.image(barplot_path, x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1], w=TWO_GRAPH_WIDTH)
-
-    def make_dose_effect_pages(self, parameters_to_plot=None):
-        """
-        for each feature (param) -> create ONE graph per treatment,
-        where x-axis is the full dose permutation list for that treatment's channel-count:
-        1 channel  -> NEG, POS, HIGH
-        2 channels -> NEG/NEG, NEG/POS, ... , HIGH/HIGH
-        3 channels -> 27 combos
-
-        FIX: First aggregate per-well values before plotting
-        """
-
-        # ---------------------------
-        # config / defaults
-        # ---------------------------
-        if parameters_to_plot is None:
-            parameters_to_plot = getattr(self, "parameters_to_plot", None)
-
-        if parameters_to_plot is None or len(parameters_to_plot) == 0:
-            # fallback: try to infer numeric columns later
-            parameters_to_plot = []
-
-        # output dir (same style as your existing code)
-        out_dir = os.path.join(self.output_path, "dose_effect_pages")
-        os.makedirs(out_dir, exist_ok=True)
-
-        DOSE_LEVELS = ["NEG", "POS", "HIGH"]
-
-        def all_combo_labels(n):
-            return ["/".join(p) for p in product(DOSE_LEVELS, repeat=n)]
-
-        def to_slash_combo(combo_str):
-            """
-            your existing combo strings look like:
-            "ch1=NEG"
-            "ch1=NEG__ch2=POS"
-            "ch1=NEG__ch2=POS__ch3=HIGH"
-            convert -> "NEG" / "NEG/POS" / "NEG/POS/HIGH"
-            """
-            parts = str(combo_str).split("__")
-            doses = []
-            for p in parts:
-                if "=" in p:
-                    doses.append(p.split("=")[-1].strip().upper())
-            return "/".join(doses) if doses else "NO_CHANNEL_INFO"
-
-        def safe_name(s):
-            s = str(s)
-            for ch in ["/", "\\", ":", "|", "*", "?", "\"", "<", ">"]:
-                s = s.replace(ch, "_")
-            return s
-
-        # ---------------------------
-        # build the per-well meta + compute per-well averages
-        # ---------------------------
-        meta_rows = []
-        well_avg_data = {}  # {well: {param: avg_value}}
-
-        for well in self.wells:
-            treatment = self._treatment_key(well)
-            well_df = self.well_info.get(well, pd.DataFrame())
-
-            if well_df.empty:
-                continue
-
-            dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
-            combo = self._dose_combo_str(dose_by_channel)
-            combo_slash = to_slash_combo(combo)
-
-            # Compute per-well averages for each parameter
-            well_avgs = {}
-            for param in CLUSTER_CELL_FIELDS + CLUSTER_ID_FIELDS + list(PARAM_GRAPHS.keys()):
-                if param in well_df.columns:
-                    vals = well_df[param].dropna()
-                    if len(vals) > 0:
-                        well_avgs[param] = float(np.mean(vals))
-
-            well_avg_data[well] = well_avgs
-            meta_rows.append({
-                "well": well,
-                "treatment": treatment,
-                "combo": combo,
-                "combo_slash": combo_slash
-            })
-
-        meta_df = pd.DataFrame(meta_rows)
-
-        if meta_df.empty:
-            print("No wells with valid metadata for dose effect pages")
-            return
-
-        # ---------------------------
-        # choose which params to plot
-        # ---------------------------
-        if len(parameters_to_plot) == 0:
-            # infer from available parameters across wells
-            all_params = set()
-            for avgs in well_avg_data.values():
-                all_params.update(avgs.keys())
-            parameters_to_plot = list(all_params)
-
-        # ---------------------------
-        # main loop: param -> treatment -> plot dose permutations
-        # ---------------------------
-        for param in parameters_to_plot:
-            if param in ["well", "Well", "treatment", "combo", "combo_slash"]:
-                continue
-
-            # Gather data from wells that have this parameter
-            rows = []
-            for well in self.wells:
-                if well not in well_avg_data:
-                    continue
-                if param not in well_avg_data[well]:
-                    continue
-
-                meta_row = meta_df[meta_df["well"] == well]
-                if meta_row.empty:
-                    continue
-
-                rows.append({
-                    "value": well_avg_data[well][param],
-                    "treatment": meta_row.iloc[0]["treatment"],
-                    "combo_slash": meta_row.iloc[0]["combo_slash"],
-                    "well": well
-                })
-
-            if not rows:
-                print(f"Skipping {param}: no valid data")
-                continue
-
-            dfp = pd.DataFrame(rows)
-
-            for treatment in sorted(dfp["treatment"].unique().tolist()):
-                dft = dfp[dfp["treatment"] == treatment].copy()
-                if dft.empty:
-                    continue
-
-                # determine channel count from combo_slash (count of "/" + 1)
-                if len(dft["combo_slash"]) > 0:
-                    max_slashes = int(dft["combo_slash"].astype(str).str.count("/").max())
-                    n_channels = max_slashes + 1
-                else:
-                    n_channels = 1
-
-                # build the full x-axis list for this channel count
-                xlabels = all_combo_labels(n_channels)
-
-                # aggregate per combo (well-level data)
-                agg = (
-                    dft.groupby("combo_slash")["value"]
-                        .agg(["mean", "count", "std"])
-                        .reset_index()
-                )
-                agg["sem"] = agg["std"] / np.sqrt(agg["count"].clip(lower=1))
-
-                # map into the full xlabels, keep missing as NaN
-                y = []
-                yerr = []
-                for lab in xlabels:
-                    r = agg[agg["combo_slash"] == lab]
-                    if len(r) == 0:
-                        y.append(np.nan)
-                        yerr.append(0.0)
-                    else:
-                        y.append(float(r["mean"].iloc[0]))
-                        sem = r["sem"].iloc[0]
-                        yerr.append(float(0.0 if pd.isna(sem) else sem))
-
-                # Filter out bars with all NaN values
-                valid_indices = [i for i, val in enumerate(y) if not np.isnan(val)]
-                if not valid_indices:
-                    print(f"Skipping {param} - {treatment}: all NaN values")
-                    continue
-
-                y_valid = [y[i] for i in valid_indices]
-                yerr_valid = [yerr[i] for i in valid_indices]
-                xlabels_valid = [xlabels[i] for i in valid_indices]
-
-                # plot
-                fig, ax = plt.subplots(figsize=(14, 6))
-                x = np.arange(len(xlabels_valid))
-                ax.bar(x, y_valid, yerr=yerr_valid)
-
-                ax.set_title(f"{param} - {treatment} (n_channels={n_channels})")
-                ax.set_ylabel(f"{param} {UNIT_DICT.get(param, '')}")
-                ax.set_xticks(x)
-                ax.set_xticklabels(xlabels_valid, rotation=45, ha="right")
-
-                fig.tight_layout()
-                fig.savefig(os.path.join(out_dir, f"{safe_name(param)}__{safe_name(treatment)}.jpg"), dpi=200)
-                plt.close(fig)
-
-    def make_average_page_per_dose_combo(self, parameter, dose_combo=None):
-        """
-        Create average pages (like make_average_page) but for a specific dose_combo permutation.
-        If dose_combo is None, creates pages for each unique permutation.
-
-        Each page includes:
-        - Average over time graph
-        - Average barplot (per treatment or experiment)
-
-        dose_combo example: "NEG", "NEG/POS", "NEG/POS/HIGH"
-        """
-
-        def to_slash_combo(combo_str):
-            parts = str(combo_str).split("__")
-            doses = []
-            for p in parts:
-                if "=" in p:
-                    doses.append(p.split("=")[-1].strip().upper())
-            return "/".join(doses) if doses else "NO_CHANNEL_INFO"
-
-        def safe_name(s):
-            s = str(s)
-            for ch in ["/", "\\", ":", "|", "*", "?", "\"", "<", ">"]:
-                s = s.replace(ch, "_")
-            return s
-
-        # Get all unique dose combos from wells
-        all_combos = set()
-        meta_rows = []
-        for well in self.wells:
-            well_df = self.well_info.get(well, pd.DataFrame())
-            if well_df.empty:
-                continue
-            dose_by_channel = self._infer_dose_by_channel_from_df(well_df)
-            combo = self._dose_combo_str(dose_by_channel)
-            combo_slash = to_slash_combo(combo)
-            all_combos.add(combo_slash)
-            meta_rows.append({"well": well, "combo_slash": combo_slash})
-
-        meta_df = pd.DataFrame(meta_rows)
-
-        # Determine which combos to process
-        combos_to_process = [dose_combo] if dose_combo else sorted(list(all_combos))
-
-        for combo in combos_to_process:
-            # Filter wells that match this combo
-            matching_wells = meta_df[meta_df["combo_slash"] == combo]["well"].tolist()
-            if not matching_wells:
-                continue
-
-            title = f"{parameter} average values - {safe_name(combo)}"
-            output_folder = os.path.join(self.output_path, title)
-            os.makedirs(output_folder, exist_ok=True)
-
-            # Create average over time graph
-            fig_time, ax_time = plt.subplots(figsize=(14, 6))
-
-            # Get time points
-            all_times = set()
-            for well in matching_wells:
-                well_df = self.well_info.get(well, pd.DataFrame())
-                if parameter in well_df.columns:
-                    all_times.update(well_df.TimeIndex.unique())
-
-            if all_times:
-                times_sorted = sorted(list(all_times))
-                times_min = [t * self.dt for t in times_sorted]
-
-                # Aggregate values per time across all matching wells
-                avg_per_time = []
-                std_per_time = []
-                count_per_time = []
-
-                for t in times_sorted:
-                    values = []
-                    for well in matching_wells:
-                        well_df = self.well_info.get(well, pd.DataFrame())
-                        if parameter in well_df.columns:
-                            t_data = well_df[well_df.TimeIndex == t][parameter].dropna()
-                            values.extend(t_data.tolist())
-
-                    if values:
-                        avg_per_time.append(np.mean(values))
-                        std_per_time.append(np.std(values))
-                        count_per_time.append(len(values))
-                    else:
-                        avg_per_time.append(np.nan)
-                        std_per_time.append(0)
-                        count_per_time.append(0)
-
-                # Plot with error bars (SEM)
-                sem_per_time = [s / np.sqrt(max(c, 1)) for s, c in zip(std_per_time, count_per_time)]
-                ax_time.plot(times_min, avg_per_time, linewidth=2, marker='o')
-                ax_time.fill_between(times_min,
-                                     [a - e for a, e in zip(avg_per_time, sem_per_time)],
-                                     [a + e for a, e in zip(avg_per_time, sem_per_time)],
-                                     alpha=0.3)
-
-                ax_time.set_xlabel("Time [min]")
-                ax_time.set_ylabel(f"{parameter} {UNIT_DICT.get(parameter, '')}")
-                ax_time.set_title(f"{parameter} - {combo} - Over Time")
-                fig_time.tight_layout()
-                fig_time.savefig(os.path.join(output_folder, "over_time.jpg"), dpi=200)
-                plt.close(fig_time)
-
-            # Create barplot (grouped by experiment/treatment)
-            fig_bar, ax_bar = plt.subplots(figsize=(14, 6))
-
-            # Compute averages per well for this dose combo
-            well_avgs = {}
-            well_treatments = {}
-            for well in matching_wells:
-                well_df = self.well_info.get(well, pd.DataFrame())
-                if parameter in well_df.columns:
-                    vals = well_df[parameter].dropna()
-                    if len(vals) > 0:
-                        well_avgs[well] = np.mean(vals)
-                        well_treatments[well] = self._treatment_key(well)
-
-            if well_avgs:
-                # Group by treatment
-                treat_data = {}
-                for well, avg_val in well_avgs.items():
-                    treat = well_treatments[well]
-                    if treat not in treat_data:
-                        treat_data[treat] = []
-                    treat_data[treat].append(avg_val)
-
-                treats = sorted(treat_data.keys())
-                means = [np.mean(treat_data[t]) for t in treats]
-                stds = [np.std(treat_data[t]) for t in treats]
-                sems = [s / np.sqrt(max(len(treat_data[t]), 1)) for s, t in zip(stds, treats)]
-
-                x_pos = np.arange(len(treats))
-                ax_bar.bar(x_pos, means, yerr=sems, capsize=5)
-                ax_bar.set_xticks(x_pos)
-                ax_bar.set_xticklabels(treats, rotation=45, ha='right')
-                ax_bar.set_ylabel(f"{parameter} {UNIT_DICT.get(parameter, '')}")
-                ax_bar.set_title(f"{parameter} - {combo} - By Treatment")
-                fig_bar.tight_layout()
-                fig_bar.savefig(os.path.join(output_folder, "barplot.jpg"), dpi=200)
-                plt.close(fig_bar)
 
     def draw_layer_graph(self, well, parameter, output_folder=None, intervals=15, absolute=False, groups=False,
                          fixed_distance=30, scaled=False):
@@ -1817,8 +1724,7 @@ class Batch_Experiment(object):
         min_val, max_val = self._scratch_min_max(parameter, absolute=absolute, groups=groups,
                                                  fixed_distance=fixed_distance, scaled=scaled)
         scratch_info_per_time = self._scratch_info(well, intervals=intervals)
-        x = well_df.TimeIndex.unique() * self.dt
-        x.sort()
+        x = np.sort(well_df.TimeIndex.unique()) * self.dt
         y = np.array(range(intervals))
         normalized = colors.Normalize(vmin=min_val, vmax=max_val)
         graph_ax.set_title("%d%s - " % (self.pdf.page_no(), chr(self.graph_counter)) + well_name)
@@ -1968,8 +1874,7 @@ class Batch_Experiment(object):
             well_df = well_df.dropna(subset=[parameter1, parameter2])
             marker = MARKERS[i]
             if average:
-                c = well_df.TimeIndex.unique() * self.dt
-                c.sort()
+                c = np.sort(well_df.TimeIndex.unique()) * self.dt
                 vals1 = [well_df[well_df.TimeIndex == time_index / self.dt][parameter1] for time_index in c]
                 vals2 = [well_df[well_df.TimeIndex == time_index / self.dt][parameter2] for time_index in c]
                 if absolute:
@@ -2400,19 +2305,61 @@ class Batch_Experiment(object):
             print("No (well, combo) indexes were generated -> skipping clustering page")
             return
 
-        avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns,
-                              index=new_index)
+        # Remove columns with all NaN values
+        print(f"\nBefore cleaning: avg_df shape = {avg_df.shape}")
+        print(f"NaN counts per column (top 10):")
+        nan_counts = avg_df.isna().sum().sort_values(ascending=False)
+        print(nan_counts.head(10))
+
+        # Drop columns that are all NaN
+        avg_df = avg_df.dropna(axis=1, how='all')
+        print(f"After dropping all-NaN columns: avg_df shape = {avg_df.shape}")
+
+        # Fill remaining NaN values with 0
+        avg_df = avg_df.fillna(0)
+
+        # Remove columns with zero variance (same value everywhere)
+        print("\nChecking for zero-variance columns...")
+        variances = avg_df.var(numeric_only=True)
+        zero_var_cols = variances[variances == 0].index.tolist()
+        if zero_var_cols:
+            print(f"Found {len(zero_var_cols)} zero-variance columns, removing them")
+            avg_df = avg_df.drop(columns=zero_var_cols)
+        print(f"After removing zero-variance columns: avg_df shape = {avg_df.shape}")
+
+        # Scale the data
+        print(f"\nScaling data with {avg_df.shape[0]} rows and {avg_df.shape[1]} columns")
+        scaled_data = scaler.fit_transform(avg_df)
+
+        # Check for NaN or infinite values after scaling
+        if np.isnan(scaled_data).any():
+            print("WARNING: NaN values found after scaling!")
+            nan_mask = np.isnan(scaled_data)
+            print(f"NaN values per column: {nan_mask.sum(axis=0)}")
+            # Replace NaN with 0
+            scaled_data = np.nan_to_num(scaled_data, nan=0.0)
+
+        if np.isinf(scaled_data).any():
+            print("WARNING: Infinite values found after scaling!")
+            # Replace infinite values with large but finite values
+            scaled_data = np.where(np.isinf(scaled_data), np.sign(scaled_data) * 1e10, scaled_data)
+
+        avg_df = pd.DataFrame(scaled_data, columns=avg_df.columns, index=new_index)
+        print(f"Final avg_df shape before linkage: {avg_df.shape}")
+        print(f"Data contains NaN: {avg_df.isna().any().any()}")
+        print(f"Data contains inf: {np.isinf(avg_df.values).any()}")
+
         linkaged_pca = linkage(avg_df, "ward")
 
-
-
         # ---- category colors (fixed, always same) ----
-        cat_color = {
-            "Neg": "#1f77b4",
-            "Pos": "#ff7f0e",
-            "High": "#d62728",
-            "NA": "#bbbbbb"
+        cat_color_hex = {
+            "Neg": "#000000FF",      # Black
+            "Pos": "#808080FF",      # Gray
+            "High": "#FFFFFFFF",     # White
+            "NA": "#fc0202c3"        # Red
         }
+        # Convert hex colors to RGBA tuples for proper matplotlib rendering
+        cat_color = {k: hex_to_rgba(v) for k, v in cat_color_hex.items()}
 
         row_names = list(avg_df.index)  # these are your plotted rows: "<exp>_<combo>"
 
@@ -2420,11 +2367,44 @@ class Batch_Experiment(object):
         exp_names = [rn.split("_", 1)[0] for rn in row_names]
         unique_exps = sorted(set(exp_names))
 
-        # give each experiment a unique color
-        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_exps)))
-        exp_color = {e: exp_palette[i] for i, e in enumerate(unique_exps)}
+        print(f"\n=== EXPERIMENT GROUPING DEBUG ===")
+        print(f"Total row names: {len(row_names)}")
+        print(f"Unique experiments (before grouping): {len(unique_exps)}")
+        print(f"Sample row names: {row_names[:5]}")
+        print(f"Unique experiments: {unique_exps}")
+
+        # Group experiments by well letter + experiment name (ignoring numbers in between)
+        # e.g., c03METRNNIRNOCO and c02METRNNIRNOCO group as "cMETRNNIRNOCO"
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
+            if match:
+                return match.group(1) + match.group(2)  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+
+        exp_bases = {e: get_exp_base(e) for e in unique_exps}
+        unique_bases = sorted(set(exp_bases.values()))
+
+        print(f"Experiment bases (after grouping): {len(unique_bases)}")
+        print(f"Experiment base mapping:")
+        for exp, base in sorted(exp_bases.items()):
+            print(f"  {exp} -> {base}")
+
+        # give each unique experiment base a unique color
+        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_bases)))
+        base_color = {b: exp_palette[i] for i, b in enumerate(unique_bases)}
+
+        print(f"Base color assignment:")
+        for base, color in sorted(base_color.items()):
+            print(f"  {base} -> {color}")
+
+        # Each experiment gets the color of its base
+        exp_color = {e: base_color[exp_bases[e]] for e in unique_exps}
 
         exp_colors = pd.Series([exp_color[e] for e in exp_names], index=row_names, name="Experiment")
+        print(f"=== END EXPERIMENT GROUPING ===\n")
 
         def parse_combo(rn: str):
             _, combo = rn.split("_", 1)
@@ -2452,39 +2432,119 @@ class Batch_Experiment(object):
         # cbar = s.cax
         # cbar.set_position([0.02, pos.bounds[1], 0.02, pos.bounds[3]]);
 
+        # move row_colors labels to the top
+        ax_rc = s.ax_row_colors
+
+        ax_rc.xaxis.set_ticks_position("top")
+        ax_rc.xaxis.set_label_position("top")
+
+        ax_rc.set_xticklabels(
+            ax_rc.get_xticklabels(),
+            rotation=0,
+            ha="center",
+            fontsize=8
+        )
+
         handles = []
 
-        # experiment legend (one entry per experiment)
-        for e in unique_exps:
-            handles.append(patches.Patch(facecolor=exp_color[e], label=f"Exp: {e}"))
+        print(f"\n=== LEGEND CREATION DEBUG ===")
+        print(f"Creating legend entries for {len(unique_bases)} experiment bases:")
+
+        # experiment legend grouped by base experiment (well letter + name, ignoring numbers)
+        for base in unique_bases:
+            exps_in_base = sorted([e for e in unique_exps if exp_bases[e] == base])
+            print(f"  Base: {base} -> variants: {exps_in_base}")
+            if len(exps_in_base) == 1:
+                label = f"{exps_in_base[0]}"
+                handles.append(patches.Patch(facecolor=base_color[base], label=label))
+                print(f"    Label: {label}")
+            else:
+                label = f"{base} ({', '.join(exps_in_base)})"
+                handles.append(patches.Patch(facecolor=base_color[base], label=label))
+                print(f"    Label: {label}")
 
         # category legend (fixed mapping)
         for k in ["Neg", "Pos", "High", "NA"]:
             handles.append(patches.Patch(facecolor=cat_color[k], label=k))
 
-        s.ax_heatmap.legend(
+        print(f"Total legend handles: {len(handles)}")
+        print(f"=== END LEGEND CREATION ===\n")
+
+        # Raise the legend higher (move up)
+        s.fig.legend(
             handles=handles,
-            loc="upper left",
-            bbox_to_anchor=(1.02, 1.0),  # puts legend to the right of the heatmap
-            borderaxespad=0,
+            loc="upper right",
+            bbox_to_anchor=(0.98, 1.15),  # Raised legend higher
             fontsize=8
         )
+
+        # Color the column names (parameters) based on parameter type
+        col_names = list(avg_df.columns)
+
+        # Define morphological and movement parameters
+        morphological_params = [
+            "Area", "Volume",
+            "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B",
+            "Eccentricity_C",
+            "Sphericity", "EllipsoidAxisLengthB", "EllipsoidAxisLengthC",
+            "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X", "Ellip_Ax_C_Y", "Ellip_Ax_C_Z"
+        ]
+
+        movement_params = [
+            "Displacement_From_Last_Id", "Instantaneous_Speed", "Velocity_X", "Velocity_Y", "Velocity_Z",
+            "Coll", "Coll_CUBE", "Acceleration", "Acceleration_X", "Acceleration_Y", "Acceleration_Z",
+            "Displacement2", "Directional_Change", "Directional_Change_X", "Directional_Change_Y",
+            "Directional_Change_Z",
+            "Instantaneous_Angle", "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z",
+            "Min_Distance",
+            "Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X", "Track_Displacement_Y",
+            "Track_Displacement_Z",
+            "Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed",
+            "Confinement_Ratio", "MSD_Directed_v2", "MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score",
+            "MSD_Brownian_D", "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D",
+            "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height",
+            "Velocity_Full_Width_Half_Maximum", "Velocity_Ending_Value", "Velocity_Ending_Time",
+            "Velocity_Starting_Value", "Velocity_Starting_Time"
+        ]
+
+        # Map colors based on parameter type
+        param_colors = {}
+        for col in col_names:
+            if col in morphological_params:
+                param_colors[col] = "#000000"  # Black for morphological
+            elif col in movement_params:
+                param_colors[col] = "#1f77b4"  # Blue for movement
+            else:
+                param_colors[col] = "#7f7f7f"  # Gray for others (intensity, etc.)
+
+        # Apply colors to column labels
+        for i, label in enumerate(s.ax_heatmap.get_xticklabels()):
+            col_name = col_names[i] if i < len(col_names) else str(label)
+            color = param_colors.get(col_name, "#000000")
+            label.set_color(color)
 
         s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
 
         ax = s.ax_heatmap
-        ax.set_yticks(range(len(avg_df.index)))
-        s.ax_heatmap.set_yticklabels(
-            s.ax_heatmap.get_yticklabels(),
-            fontsize=6
-        )
+        ax.set_yticks(np.arange(len(avg_df.index)) + 0.5)  # +0.5 is important for clustermap
+        
+        # Abbreviate row names for display
+        abbreviated_labels = []
+        for idx in avg_df.index:
+            well_part, combo_part = idx.split("_", 1)
+            short_name = self.shortened_well_names.get(well_part, well_part)
+            short_combo = abbreviate_combo(combo_part)
+            abbreviated_labels.append(f"{short_name}_{short_combo}")
+        
+        ax.set_yticklabels(abbreviated_labels, fontsize=6)
 
         if output_folder:
-            plt.savefig(os.path.join(output_folder, "clustermap_treatment_dose.jpg"))
+            plt.savefig(os.path.join(output_folder, "clustermap_treatment_dose.jpg"), bbox_inches="tight", dpi=300)
             plt.close()
         else:
             plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
             plt.show()
+        
 
 
     def make_cluster_page(self):
@@ -2538,51 +2598,6 @@ class Batch_Experiment(object):
                     json.dump(self.__dict__[dict_name], f,
                               default=lambda x: float(x) if type(x) == np.float64 else x.__dict__)
 
-    def make_dose_effect_pdf_pages(self):
-        """
-        insert dose-effect plots into the report pdf.
-        expects images already created under: self.output_path/dose_effect_pages
-        file name format: <param>__<treatment>.jpg
-        """
-
-        img_dir = os.path.join(self.output_path, "dose_effect_pages")
-        if not os.path.exists(img_dir):
-            print("make_dose_effect_pdf_pages: no folder:", img_dir)
-            return
-
-        imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(".jpg")]
-        if len(imgs) == 0:
-            print("make_dose_effect_pdf_pages: no images found in:", img_dir)
-            return
-
-        # group by parameter name so each parameter gets its own pages
-        by_param = {}
-        for f in imgs:
-            base = os.path.splitext(f)[0]
-            if "__" in base:
-                param, treatment = base.split("__", 1)
-            else:
-                param, treatment = base, ""
-            by_param.setdefault(param, []).append(f)
-
-        # for each param -> make as many pages as needed (8 plots/page)
-        for param in sorted(by_param.keys()):
-            files = sorted(by_param[param])
-
-            for start in range(0, len(files), 8):
-                chunk = files[start:start + 8]
-
-                title = f"dose effects - {param}"
-                if start > 0:
-                    title += " (continued)"
-                self.new_page(title)
-
-                for i, fname in enumerate(chunk):
-                    path = os.path.join(img_dir, fname)
-                    if not os.path.exists(path):
-                        continue
-                    self.pdf.image(path, x=EIGHT_GRAPH_X[i], y=EIGHT_GRAPH_Y[i], w=EIGHT_GRAPH_WIDTH)
-
     def create_output(self, output_path, param_graphs=PARAM_GRAPHS, param_pair_graphs=PARAM_PAIR_GRAPHS):
         pr = cProfile.Profile()
         pr.enable()
@@ -2600,6 +2615,8 @@ class Batch_Experiment(object):
         if self.scratch:
             self.make_scratch_pages()
         self.make_sunplot_page()
+        well_info_copy = self.well_info.copy()
+        self.add_category_to_well_info()
         for parameter in param_graphs.keys():
             if parameter in self.parameters:
                 print("\tMaking %s graphs..." % parameter)
@@ -2615,8 +2632,10 @@ class Batch_Experiment(object):
                         self.make_y_pos_time_page(parameter, absolute=True, scaled=True)
                 if "average" in param_graphs[parameter]:
                     self.make_average_page(parameter)
+                    
                 if "absolute_average" in param_graphs[parameter]:
                     self.make_average_page(parameter, absolute=True)
+                    
                 if self.scratch == True:
                     if "layers" in param_graphs[parameter]:
                         self.make_layers_page(parameter)
@@ -2638,11 +2657,7 @@ class Batch_Experiment(object):
                     absolute = False
                 if "average" in param_pair_graphs[parameter_pair]:
                     self.make_param_vs_param_page(parameter1, parameter2, average=True, absolute=absolute)
-        print("\tMaking dose effect pages...")
-        self.make_dose_effect_pages()
-        self.make_dose_effect_pdf_pages()
-        print("\tMaking average pages per dose combo...")
-        self.make_pdf_pages_average_per_dose_combo()
+        self.well_info = well_info_copy
         print("\tMaking last pages...")
         self.make_wave_pages()
         self.make_displacement_page()
