@@ -280,7 +280,7 @@ class PDF(FPDF):
 class Batch_Experiment(object):
 
     def __init__(self, exp_name, exp_sub_name, wells, scratch, protocol_file="", incucyte_files="", imaris_xls_files="",
-                 dt=45, design="auto", table_info=None,exp_rename_dir =""):
+                 dt=45, design="auto", table_info=None,exp_rename_dir ="",control_channel="NNIR"):
         self.exp_name = exp_name
         self.exp_sub_name = exp_sub_name
         self.wells = wells
@@ -301,6 +301,7 @@ class Batch_Experiment(object):
         self.design = design
         self.table_info = table_info
         self.exp_rename_dir = exp_rename_dir
+        self.control_channel = control_channel
 
     def __has_attribute__(self, attribute):
         if attribute in self.__dict__.keys():
@@ -311,28 +312,49 @@ class Batch_Experiment(object):
 
 
 
-    def _infer_dose_by_channel_from_df(self, well_df):
+    def _infer_dose_by_channel_from_df(self, well_df,well,control_channel=None):
         """
         returns dict like {"ch1":"POS", "ch2":"NEG"} based on mode over time.
         if a channel column doesn't exist, it's ignored.
+        if control_channel is specified, that channel is filled with NA (averaged over).
         """
 
         cols = [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in well_df.columns]
 
-        if not cols:
+        if not cols or well_df.empty:
             return []
 
-        # ensure no NaNs kill combos
-        tmp = well_df[cols].fillna("NA")
+        # Extract channel names starting at index 22 (each channel is 4 characters)
+        # Channels are at positions: 22-25, 26-29, 30-33
+        channels = [well[22+i*4:22+(i+1)*4] for i in range(3)]
+        
+        # Make a copy to avoid modifying original
+        tmp = well_df[cols].copy().fillna("NA")
+        
+        # Fill control channel with NA if specified
+        if control_channel in channels:
+            idx = channels.index(control_channel)
+            control_col = f"Cha{idx+1}_Category"
+            if control_col in tmp.columns:
+                tmp[control_col] = "NA"
+                # Also fill in the original well_df for filtering later
+                well_df[control_col] = "NA"
 
-        # build combos row-wise, but keep only the channels that exist in this df
+        # build combos row-wise from all columns
         combos = tmp.apply(lambda r: "_".join([str(r[c]) for c in cols]), axis=1)
 
-        # unique combos, drop the all-NA combo if you want
-        combos = combos.unique().tolist()
-        # optional: remove all-NA
+        # unique combos
+        combos = combos.unique().tolist() if hasattr(combos, 'unique') else list(set(combos))
+        
+        # Remove all-NA combo only if there are other combos available
+        # (keep it if it's the only combo, e.g., when only control channel exists)
         all_na = "_".join(["NA"] * len(cols))
-        combos = [c for c in combos if c != all_na]
+        non_na_combos = [c for c in combos if c != all_na]
+        
+        # If removing all-NA leaves us with no combos, keep the all-NA combo
+        if non_na_combos:
+            combos = non_na_combos
+        # else: keep combos as-is (includes all-NA)
 
         return combos
 
@@ -764,8 +786,6 @@ class Batch_Experiment(object):
             print("final columns:", list(merged.columns))
             print("non-null counts:")
             print(merged[cat_cols].notna().sum())
-
-
 
             for i in (1, 2, 3):
                 c = f"Cha{i}_Category"
@@ -1274,30 +1294,74 @@ class Batch_Experiment(object):
         graph_ax.set_ylabel("Average " + parameter + UNIT_DICT[parameter] + r" (+-$\frac{\sigma}{\sqrt{n}}$)")
         lines = []
         well_names = []
-        for i in range(self.well_amount):
-            color = LINE_COLORS[i]
-            well = self.wells[i]
+        
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
+            if match:
+                return match.group(1) + match.group(2)
+            return exp_name
+        
+        # Group wells by experiment base name
+        treatment_data = {}  # {exp_base: {timeindex: [values]}}
+        
+        # First pass: aggregate data by experiment base
+        for well in self.wells:
             well_df = self.well_info[well]
-            # --- Fix: skip wells missing the parameter ---
             if parameter not in well_df.columns:
                 continue
             well_df = well_df.dropna(subset=[parameter])
-            well_name = self.shortened_well_names[well]
-            x = np.sort(well_df.TimeIndex.unique())  # Convert to numpy array and sort
-            vals = [well_df[well_df.TimeIndex == time_index][parameter] for time_index in x]
-            x = x * self.dt
-            if absolute:
-                vals = [np.absolute(val) for val in vals]
-            y = [np.average(val) for val in vals]
-            yerr = [np.std(val) / (len(val) ** 0.5) for val in vals]
+            if len(well_df) == 0:
+                continue
+            
+            exp_base = get_exp_base(well)
+            
+            if exp_base not in treatment_data:
+                treatment_data[exp_base] = {}
+            
+            # Aggregate by timeindex
+            x = np.sort(well_df.TimeIndex.unique())
+            
+            for time_index in x:
+                time_vals = well_df[well_df.TimeIndex == time_index][parameter]
+                
+                if absolute:
+                    time_vals = np.absolute(time_vals)
+                
+                if time_index not in treatment_data[exp_base]:
+                    treatment_data[exp_base][time_index] = []
+                
+                treatment_data[exp_base][time_index].extend(time_vals.tolist())
+        
+        # Plot each experiment base group
+        sorted_keys = sorted(treatment_data.keys())
+        
+        for color_idx, exp_base in enumerate(sorted_keys):
+            time_data = treatment_data[exp_base]
+            
+            # Get sorted time indexes
+            x_indices = sorted(time_data.keys())
+            x = np.array(x_indices) * self.dt
+            
+            # Calculate mean and SEM across all values for each timepoint
+            y = [np.average(time_data[ti]) for ti in x_indices]
+            yerr = [np.std(time_data[ti]) / (len(time_data[ti]) ** 0.5) for ti in x_indices]
+            
+            color = LINE_COLORS[color_idx % len(LINE_COLORS)]
             line = graph_ax.plot(x, y, color=color)[0]
             color = line.get_color()
+            
             for j in range(len(yerr)):
                 graph_ax.errorbar(x[j], y[j], yerr=yerr[j], ecolor=color)
+            
             lines.append(line)
-            well_names.append(well_name)
-        if self.well_amount <= 5:
+            well_names.append(exp_base)
+        
+        if len(lines) <= 10:
             graph_ax.legend(lines, well_names)
+        
         graph_ax.set_box_aspect(1)
         fig.tight_layout()
         if output_folder:
@@ -1306,7 +1370,7 @@ class Batch_Experiment(object):
         else:
             plt.show()
 
-    def draw_average_over_time_per_dose(self, parameter, output_folder=None, absolute=False):
+    def draw_average_over_time_per_dose(self, parameter, output_folder=None, absolute=False, control_channel=None):
         fig, graph_ax = plt.subplots()
         title = "Average " + parameter + " over time (per Treatment + Dose Combo)"
         if absolute:
@@ -1339,7 +1403,7 @@ class Batch_Experiment(object):
             well_df = self.well_info[well]
             if parameter not in well_df.columns:
                 continue
-            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df, well, control_channel=control_channel)
         
         # Second pass: aggregate data by (treatment_base, combo)
         for well in self.wells:
@@ -1351,8 +1415,7 @@ class Batch_Experiment(object):
             if len(well_df) == 0:
                 continue
             
-            short_name = self.shortened_well_names[well]
-            exp_base = get_exp_base(short_name)
+            exp_base = get_exp_base(well)  # Use full well name, not shortened
             
             for combo in well_combos[well]:
                 # Filter data for this combo
@@ -1499,17 +1562,18 @@ class Batch_Experiment(object):
             plt.show()
 
     def draw_average_barplot_per_dose(self, parameter, output_folder=None, absolute=False, wave=False, alt_name=None,
-                             per_cell=False):
+                             per_cell=False, control_channel=None):
         global average_df
         
         # Helper function to group experiments
-        import re
-        def get_exp_base(exp_name):
-            """Extract well letter + experiment name, removing numbers in between."""
-            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
-            if match:
-                return match.group(1) + match.group(2)
-            return exp_name
+        def get_exp_base(well_name):
+            """Extract well letter + treatment name from full well name.
+            well_name[15] = well letter (B, C, D, E)
+            well_name[22:] = treatment name
+            """
+            if len(well_name) > 22:
+                return well_name[15] + well_name[22:]
+            return well_name  # fallback if pattern doesn't match
         
         # First pass: count expected bars to size figure appropriately
         well_combos = {}
@@ -1518,7 +1582,7 @@ class Batch_Experiment(object):
             well_df = self.well_info[well]
             if parameter not in well_df.columns:
                 continue
-            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df, well, control_channel=control_channel)
             expected_bars += len(well_combos[well])
         
         # Remove duplicates from grouping by treatment base
@@ -1526,8 +1590,7 @@ class Batch_Experiment(object):
         for well in self.wells:
             if well not in well_combos:
                 continue
-            short_name = self.shortened_well_names[well]
-            exp_base = get_exp_base(short_name)
+            exp_base = get_exp_base(well)  # Use full well name
             for combo in well_combos[well]:
                 treatment_combo_pairs.add((exp_base, combo))
         
@@ -1546,16 +1609,6 @@ class Batch_Experiment(object):
         graph_ax.set_xlabel("Treatment + Combo")
         graph_ax.set_ylabel("Average " + parameter + UNIT_DICT[parameter])
         
-        # Helper function to group experiments
-        import re
-        def get_exp_base(exp_name):
-            """Extract well letter + experiment name, removing numbers in between."""
-            # Match: letter(s) followed by any numbers, then the rest
-            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
-            if match:
-                return match.group(1) + match.group(2)  # well letter + experiment name
-            return exp_name  # fallback if pattern doesn't match
-        
         # Group wells by (experiment base, combo) pair
         treatment_values = {}  # {(exp_base, combo): [all_values]}
         well_combos = {}
@@ -1565,7 +1618,7 @@ class Batch_Experiment(object):
             well_df = self.well_info[well]
             if parameter not in well_df.columns:
                 continue
-            well_combos[well] = self._infer_dose_by_channel_from_df(well_df)
+            well_combos[well] = self._infer_dose_by_channel_from_df(well_df, well, control_channel=control_channel)
         
         # Second pass: aggregate data by (treatment_base, combo)
         for well in self.wells:
@@ -1579,8 +1632,7 @@ class Batch_Experiment(object):
             if len(well_df) == 0:
                 continue
             
-            short_name = self.shortened_well_names[well]
-            exp_base = get_exp_base(short_name)
+            exp_base = get_exp_base(well)  # Use full well name
             
             for combo in well_combos[well]:
                 # Filter data for this combo
@@ -1679,7 +1731,7 @@ class Batch_Experiment(object):
         else:
             plt.show()
 
-    def make_average_page(self, parameter, absolute=False):
+    def make_average_page(self, parameter, absolute=False,control_channel=None):
 
         title = parameter + " average values"
         if absolute:
@@ -1701,11 +1753,11 @@ class Batch_Experiment(object):
 
         self.new_page(title + " per dose combo")
         if not os.path.exists(os.path.join(output_folder, "over_time_per_dose.jpg")):
-            self.draw_average_over_time_per_dose(parameter, output_folder=output_folder, absolute=absolute)
+            self.draw_average_over_time_per_dose(parameter, output_folder=output_folder, absolute=absolute, control_channel=control_channel)
         self.pdf.image(os.path.join(output_folder, "over_time_per_dose.jpg"), x=TWO_GRAPH_X[0], y=TWO_GRAPH_Y[0],
                        w=TWO_GRAPH_WIDTH)
         if not os.path.exists(os.path.join(output_folder, "barplot_per_dose.jpg")):
-            self.draw_average_barplot_per_dose(parameter, output_folder=output_folder, absolute=absolute)
+            self.draw_average_barplot_per_dose(parameter, output_folder=output_folder, absolute=absolute, control_channel=control_channel)
         self.pdf.image(os.path.join(output_folder, "barplot_per_dose.jpg"), x=TWO_GRAPH_X[1], y=TWO_GRAPH_Y[1],
                        w=TWO_GRAPH_WIDTH)
 
@@ -2185,6 +2237,175 @@ class Batch_Experiment(object):
                        x=SINGLE_GRAPH_X, y=SINGLE_GRAPH_Y, w=SINGLE_GRAPH_WIDTH)
 
 
+    def draw_cluster_analysis_by_well(self, output_folder=None):
+        # Helper function to extract well letter + experiment name
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            group1 = None
+            group2 = None
+            if len(exp_name) > 15:
+                group1 = exp_name[15]
+            if len(exp_name) > 22:
+                group2 = exp_name[22:]
+            if group1 and group2:
+                return group1 + group2  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+        
+        def get_well_letter(exp_name):
+            """Extract just the well letter (at position 15)."""
+            if len(exp_name) > 15:
+                return exp_name[15]
+            return exp_name[0] if len(exp_name) > 0 else exp_name
+
+        # First pass: compute per-well averages
+        well_to_data = {}
+        for well in self.wells:
+            well_df = self.well_info[well]
+            well_data = {}
+            for parameter in self.parameters:
+                if parameter in CLUSTER_DROP_FIELDS:
+                    continue
+                if parameter in CLUSTER_ID_FIELDS:
+                    if parameter in well_df.columns:
+                        parameter_array = well_df[parameter].dropna()
+                        well_data[parameter] = np.average(parameter_array) if len(parameter_array) > 0 else np.nan
+                    else:
+                        well_data[parameter] = np.nan
+                elif parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
+                    if parameter in well_df.columns:
+                        cells = well_df.Parent.unique()
+                        well_df_indexed = well_df.set_index("Parent")
+                        values = np.array([0.0] * len(cells))
+                        for i in range(len(cells)):
+                            try:
+                                values[i] = well_df_indexed.loc[cells[i], parameter].iloc[0]
+                            except (AttributeError, TypeError):
+                                values[i] = well_df_indexed.loc[cells[i], parameter]
+                        if parameter in CLUSTER_WAVE_FIELDS:
+                            values = values[values.nonzero()]
+                        values = pd.Index(values).dropna()
+                        well_data[parameter] = np.average(values) if len(values) > 0 else np.nan
+                    else:
+                        well_data[parameter] = np.nan
+            well_to_data[well] = well_data
+
+        # Second pass: group by exp_base (well letter + treatment) and average
+        exp_base_groups = {}
+        for well in self.wells:
+            exp_base = get_exp_base(well)
+            if exp_base not in exp_base_groups:
+                exp_base_groups[exp_base] = []
+            exp_base_groups[exp_base].append(well)
+
+        # Create averaged dataframe by exp_base
+        avg_df = pd.DataFrame()
+        exp_base_to_letter = {}  # Track which well letter each exp_base belongs to
+        for exp_base in sorted(exp_base_groups.keys()):
+            group_wells = exp_base_groups[exp_base]
+            # Get the well letter from the first well in the group
+            well_letter = get_well_letter(group_wells[0])
+            exp_base_to_letter[exp_base] = well_letter
+            
+            averaged_row = {}
+            for parameter in self.parameters:
+                if parameter not in CLUSTER_DROP_FIELDS:
+                    values = [well_to_data[w].get(parameter, np.nan) for w in group_wells]
+                    values = [v for v in values if not np.isnan(v)]
+                    averaged_row[parameter] = np.average(values) if len(values) > 0 else np.nan
+            avg_df = pd.concat([avg_df, pd.DataFrame([averaged_row], index=[exp_base])], ignore_index=False)
+
+        # Drop excluded columns
+        avg_df.drop(columns=CLUSTER_DROP_FIELDS, inplace=True, errors="ignore")
+        
+        scaler = StandardScaler(with_std=True)
+        avg_df_scaled = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns, index=avg_df.index)
+        linkaged_pca = linkage(avg_df_scaled, "ward")
+
+        # ---- Row colors: one color per well letter ----
+        row_names = list(avg_df_scaled.index)
+        unique_letters = sorted(set([exp_base_to_letter[rn] for rn in row_names]))
+        
+        # Give each unique well letter a unique color
+        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_letters)))
+        letter_color = {l: (exp_palette[i][0], exp_palette[i][1], exp_palette[i][2], 1.0) 
+                        for i, l in enumerate(unique_letters)}
+        
+        # All rows will have the same color as their well letter
+        exp_colors = pd.Series([letter_color[exp_base_to_letter[rn]] for rn in row_names], index=row_names, name="Well")
+        row_colors = exp_colors
+
+        s = sns.clustermap(data=avg_df_scaled, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
+                           vmin=-2, vmax=2, figsize=(30, 15),
+                           cbar_kws=dict(use_gridspec=False),
+                           row_colors=row_colors)
+        
+        # Move row_colors labels to the top
+        ax_rc = s.ax_row_colors
+        ax_rc.xaxis.set_ticks_position("top")
+        ax_rc.xaxis.set_label_position("top")
+        ax_rc.set_xticklabels(ax_rc.get_xticklabels(), rotation=0, ha="center", fontsize=8)
+
+        # ---- Legend for well letters ----
+        handles = []
+        for letter in unique_letters:
+            label = f"Well {letter}"
+            handles.append(patches.Patch(facecolor=letter_color[letter], label=label))
+
+        s.fig.legend(handles=handles, loc="upper right", bbox_to_anchor=(0.98, 1.15), fontsize=8)
+
+        # ---- Column colors: parameter type ----
+        col_names = list(avg_df_scaled.columns)
+
+        morphological_params = [
+            "Area", "Volume",
+            "Ellipticity_oblate", "Ellipticity_prolate", "Eccentricity", "Eccentricity_A", "Eccentricity_B",
+            "Eccentricity_C",
+            "Sphericity", "EllipsoidAxisLengthB", "EllipsoidAxisLengthC",
+            "Ellip_Ax_B_X", "Ellip_Ax_B_Y", "Ellip_Ax_B_Z", "Ellip_Ax_C_X", "Ellip_Ax_C_Y", "Ellip_Ax_C_Z"
+        ]
+
+        movement_params = [
+            "Displacement_From_Last_Id", "Instantaneous_Speed", "Velocity_X", "Velocity_Y", "Velocity_Z",
+            "Coll", "Coll_CUBE", "Acceleration", "Acceleration_X", "Acceleration_Y", "Acceleration_Z",
+            "Displacement2", "Directional_Change", "Directional_Change_X", "Directional_Change_Y",
+            "Directional_Change_Z",
+            "Instantaneous_Angle", "Instantaneous_Angle_X", "Instantaneous_Angle_Y", "Instantaneous_Angle_Z",
+            "Min_Distance",
+            "Overall_Displacement", "Total_Track_Displacement", "Track_Displacement_X", "Track_Displacement_Y",
+            "Track_Displacement_Z",
+            "Linearity_of_Forward_Progression", "Mean_Curvilinear_Speed", "Mean_Straight_Line_Speed",
+            "Confinement_Ratio", "MSD_Directed_v2", "MSD_Linearity_R2_Score", "MSD_Brownian_Motion_BIC_Score",
+            "MSD_Brownian_D", "MSD_Directed_Motion_BIC_Score", "MSD_Directed_D",
+            "Velocity_Time_of_Maximum_Height", "Velocity_Maximum_Height",
+            "Velocity_Full_Width_Half_Maximum", "Velocity_Ending_Value", "Velocity_Ending_Time",
+            "Velocity_Starting_Value", "Velocity_Starting_Time"
+        ]
+
+        param_colors = {}
+        for col in col_names:
+            if col in morphological_params:
+                param_colors[col] = "#000000"  # Black for morphological
+            elif col in movement_params:
+                param_colors[col] = "#1f77b4"  # Blue for movement
+            else:
+                param_colors[col] = "#7f7f7f"  # Gray for others (intensity, etc.)
+
+        # Apply colors to column labels
+        for i, label in enumerate(s.ax_heatmap.get_xticklabels()):
+            col_name = col_names[i] if i < len(col_names) else str(label)
+            color = param_colors.get(col_name, "#000000")
+            label.set_color(color)
+
+        s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
+        
+        if output_folder:
+            plt.savefig(os.path.join(output_folder, "clustermap_treatment.jpg"), bbox_inches="tight", dpi=300)
+            plt.close()
+        else:
+            plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
+            plt.show()
+
     def draw_cluster_analysis(self, output_folder=None):
         avg_df = pd.DataFrame(index=self.wells, columns=self.parameters)
         avg_df.drop(columns=CLUSTER_DROP_FIELDS, inplace=True, errors="ignore")
@@ -2229,11 +2450,32 @@ class Batch_Experiment(object):
             plt.suptitle("%d - Cluster analysis" % self.pdf.page_no(), fontweight='bold', fontsize=30)
             plt.show()
 
-    def draw_cluster_analysis_by_treatment_dose(self, output_folder=None):
+    def draw_cluster_analysis_by_treatment_dose(self,control_channel=None, output_folder=None):
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            group1 = None
+            group2 = None
+            group1 = exp_name[15]
+            group2 = exp_name[22:]
+            if group1 and group2:
+                return group1 + group2  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+        
+        def get_treatment_only(exp_name):
+            """Extract just the treatment name (starting at position 22), ignoring well letter."""
+            if len(exp_name) > 22:
+                return exp_name[22:]
+            return exp_name
+
         indexes = []
         well_combos = {}
+        treatment_combo_data = {}  # {(exp_base, combo): [(well, combo), ...]}
+        
         for well in self.wells:
-            well_combos[well] = self._infer_dose_by_channel_from_df(self.well_info[well])
+            well_combos[well] = self._infer_dose_by_channel_from_df(self.well_info[well],well,control_channel=control_channel)
 
         print("\n=== DEBUG combos ===")
         print("num wells:", len(self.wells))
@@ -2251,9 +2493,27 @@ class Batch_Experiment(object):
                   [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in self.well_info[w].columns])
             print(" combos:", well_combos[w][:10])
 
+        # Group wells by experiment base
+        exp_base_map = {}  # {exp_base: [well1, well2, ...]}
         for well in self.wells:
-            for combo in well_combos[well]:
-                indexes.append(f"{well}_{combo}")
+            exp_base = get_exp_base(well)
+            if exp_base not in exp_base_map:
+                exp_base_map[exp_base] = []
+            exp_base_map[exp_base].append(well)
+
+        print(f"\nExperiment bases found: {sorted(exp_base_map.keys())}")
+        for base, wells_list in sorted(exp_base_map.items()):
+            print(f"  {base}: {wells_list}")
+
+        # Build indexes and treatment_combo_data
+        for exp_base, wells_in_group in exp_base_map.items():
+            for well in wells_in_group:
+                for combo in well_combos[well]:
+                    key = (exp_base, combo)
+                    if key not in treatment_combo_data:
+                        treatment_combo_data[key] = []
+                    treatment_combo_data[key].append((well, combo))
+                    indexes.append(f"{exp_base}_{combo}")
 
         print("\n=== DEBUG indexes ===")
         print("num indexes:", len(indexes))
@@ -2262,11 +2522,16 @@ class Batch_Experiment(object):
 
         avg_df = pd.DataFrame(index=indexes, columns=self.parameters)
         avg_df.drop(columns=CLUSTER_DROP_FIELDS, inplace=True, errors="ignore")
-        for well in self.wells:
-            well_df = self.well_info[well]
-            for combo in well_combos[well]:
-                combo_list = combo.split("_")  # get only dose part
+        
+        for (exp_base, combo), well_combo_pairs in treatment_combo_data.items():
+            combo_list = combo.split("_")
+            
+            # Aggregate data from all wells with this exp_base + combo
+            all_filtered_data = []
+            for well, _ in well_combo_pairs:
+                well_df = self.well_info[well]
                 filtered_df = None
+                
                 if len(combo_list) == 1:
                     filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0])]
                 elif len(combo_list) == 2:
@@ -2278,31 +2543,41 @@ class Batch_Experiment(object):
                                           (well_df['Cha3_Category'] == combo_list[2])]
                 else:
                     raise ValueError("wrong number of channels in combo for clustering.")
-                if filtered_df.empty: continue
-                for parameter in CLUSTER_ID_FIELDS:
-                    if parameter in self.parameters:
-                        parameter_array = filtered_df[parameter].dropna()
-                        avg_df.loc[f"{well}_{combo}", parameter] = np.average(parameter_array)
-                cells = filtered_df.Parent.unique()
-                indexed_filtered = filtered_df.set_index("Parent")
-                for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
-                    if parameter in self.parameters:
-                        cell_data = indexed_filtered[parameter].groupby(level=0).first()
-
-                        if parameter in CLUSTER_WAVE_FIELDS:
-                            cell_data = cell_data[cell_data != 0]
-
-                        avg_df.loc[f"{well}_{combo}", parameter] = cell_data.mean()
+                
+                if not filtered_df.empty:
+                    all_filtered_data.append(filtered_df)
+            
+            if not all_filtered_data:
+                continue
+            
+            # Concatenate all data for this combo
+            combined_df = pd.concat(all_filtered_data, ignore_index=True)
+            
+            # Average ID-level fields
+            for parameter in CLUSTER_ID_FIELDS:
+                if parameter in self.parameters:
+                    parameter_array = combined_df[parameter].dropna()
+                    avg_df.loc[f"{exp_base}_{combo}", parameter] = np.average(parameter_array)
+            
+            # Average cell-level fields
+            cells = combined_df.Parent.unique()
+            indexed_combined = combined_df.set_index("Parent")
+            for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
+                if parameter in self.parameters:
+                    cell_data = indexed_combined[parameter].groupby(level=0).first()
+                    
+                    if parameter in CLUSTER_WAVE_FIELDS:
+                        cell_data = cell_data[cell_data != 0]
+                    
+                    avg_df.loc[f"{exp_base}_{combo}", parameter] = cell_data.mean()
+        
         scaler = StandardScaler(with_std=True)
 
-        new_index = []
-        for old_idx in avg_df.index:
-            well_part, combo_part = old_idx.split("_", 1)
-            short_name = self.shortened_well_names.get(well_part, well_part)
-            new_index.append(f"{short_name}_{combo_part}")
+        # Remove duplicates from index
+        avg_df = avg_df[~avg_df.index.duplicated(keep='first')]
 
         if avg_df.shape[0] == 0:
-            print("No (well, combo) indexes were generated -> skipping clustering page")
+            print("No (exp_base, combo) indexes were generated -> skipping clustering page")
             return
 
         # Remove columns with all NaN values
@@ -2344,7 +2619,7 @@ class Batch_Experiment(object):
             # Replace infinite values with large but finite values
             scaled_data = np.where(np.isinf(scaled_data), np.sign(scaled_data) * 1e10, scaled_data)
 
-        avg_df = pd.DataFrame(scaled_data, columns=avg_df.columns, index=new_index)
+        avg_df = pd.DataFrame(scaled_data, columns=avg_df.columns, index=avg_df.index)
         print(f"Final avg_df shape before linkage: {avg_df.shape}")
         print(f"Data contains NaN: {avg_df.isna().any().any()}")
         print(f"Data contains inf: {np.isinf(avg_df.values).any()}")
@@ -2361,7 +2636,7 @@ class Batch_Experiment(object):
         # Convert hex colors to RGBA tuples for proper matplotlib rendering
         cat_color = {k: hex_to_rgba(v) for k, v in cat_color_hex.items()}
 
-        row_names = list(avg_df.index)  # these are your plotted rows: "<exp>_<combo>"
+        row_names = list(avg_df.index)  # these are your plotted rows: "<exp_base>_<combo>"
 
         # experiment = text before first "_" in the row label
         exp_names = [rn.split("_", 1)[0] for rn in row_names]
@@ -2373,37 +2648,42 @@ class Batch_Experiment(object):
         print(f"Sample row names: {row_names[:5]}")
         print(f"Unique experiments: {unique_exps}")
 
-        # Group experiments by well letter + experiment name (ignoring numbers in between)
-        # e.g., c03METRNNIRNOCO and c02METRNNIRNOCO group as "cMETRNNIRNOCO"
-        import re
-        def get_exp_base(exp_name):
-            """Extract well letter + experiment name, removing numbers in between."""
-            # Match: letter(s) followed by any numbers, then the rest
-            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
-            if match:
-                return match.group(1) + match.group(2)  # well letter + experiment name
-            return exp_name  # fallback if pattern doesn't match
+        # Group experiments by well letter only (first character) for color assignment
+        # exp_name format: "CGABYNNIRNOCONNN0NNN0WH00" -> well letter is first char (C, D, E, B)
+        exp_to_letter = {}
+        for e in unique_exps:
+            # First char is well letter (C, D, E, B)
+            exp_to_letter[e] = e[0] if len(e) > 0 else e
+        
+        unique_letters = sorted(set(exp_to_letter.values()))
 
-        exp_bases = {e: get_exp_base(e) for e in unique_exps}
-        unique_bases = sorted(set(exp_bases.values()))
+        print(f"Unique well letters (for coloring): {unique_letters}")
+        print(f"Experiment to letter mapping:")
+        for exp, letter in sorted(exp_to_letter.items()):
+            print(f"  {exp[:40]}... -> {letter}")
 
-        print(f"Experiment bases (after grouping): {len(unique_bases)}")
-        print(f"Experiment base mapping:")
-        for exp, base in sorted(exp_bases.items()):
-            print(f"  {exp} -> {base}")
+        # give each unique well letter a unique color (convert to RGBA to match cat_color format)
+        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_letters)))
+        # Convert RGB to RGBA (add alpha=1.0)
+        letter_color = {l: (exp_palette[i][0], exp_palette[i][1], exp_palette[i][2], 1.0) for i, l in enumerate(unique_letters)}
 
-        # give each unique experiment base a unique color
-        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_bases)))
-        base_color = {b: exp_palette[i] for i, b in enumerate(unique_bases)}
+        print(f"Letter color assignment:")
+        for letter, color in sorted(letter_color.items()):
+            print(f"  {letter} -> color {list(letter_color.keys()).index(letter)}")
 
-        print(f"Base color assignment:")
-        for base, color in sorted(base_color.items()):
-            print(f"  {base} -> {color}")
-
-        # Each experiment gets the color of its base
-        exp_color = {e: base_color[exp_bases[e]] for e in unique_exps}
+        # Each experiment gets the color of its well letter
+        exp_color = {e: letter_color[exp_to_letter[e]] for e in unique_exps}
 
         exp_colors = pd.Series([exp_color[e] for e in exp_names], index=row_names, name="Experiment")
+        
+        print(f"\n=== ROW COLOR ASSIGNMENT ===")
+        for i, rn in enumerate(row_names):
+            exp_name = exp_names[i]
+            letter = exp_to_letter[exp_name]
+            color_idx = list(letter_color.keys()).index(letter) if letter in letter_color else -1
+            print(f"  Row: {rn[:40]}... -> letter: {letter} -> color_idx: {color_idx}")
+        print(f"=== END ROW COLOR ASSIGNMENT ===\n")
+        
         print(f"=== END EXPERIMENT GROUPING ===\n")
 
         def parse_combo(rn: str):
@@ -2420,6 +2700,15 @@ class Batch_Experiment(object):
                                 index=row_names, name="Cha3")
 
         row_colors = pd.concat([exp_colors, cha1_colors, cha2_colors, cha3_colors], axis=1)
+        
+        # Ensure row_colors index matches avg_df index exactly
+        row_colors = row_colors.reindex(avg_df.index)
+        
+        print(f"\n=== ROW COLORS VERIFICATION ===")
+        print(f"avg_df.index: {list(avg_df.index)[:5]}...")
+        print(f"row_colors.index: {list(row_colors.index)[:5]}...")
+        print(f"Indexes match: {list(avg_df.index) == list(row_colors.index)}")
+        print(f"=== END VERIFICATION ===\n")
 
         s = sns.clustermap(data=avg_df, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
                            vmin=-2, vmax=2, figsize=(30, 15),
@@ -2448,20 +2737,16 @@ class Batch_Experiment(object):
         handles = []
 
         print(f"\n=== LEGEND CREATION DEBUG ===")
-        print(f"Creating legend entries for {len(unique_bases)} experiment bases:")
+        print(f"Creating legend entries for {len(unique_letters)} well letters:")
 
-        # experiment legend grouped by base experiment (well letter + name, ignoring numbers)
-        for base in unique_bases:
-            exps_in_base = sorted([e for e in unique_exps if exp_bases[e] == base])
-            print(f"  Base: {base} -> variants: {exps_in_base}")
-            if len(exps_in_base) == 1:
-                label = f"{exps_in_base[0]}"
-                handles.append(patches.Patch(facecolor=base_color[base], label=label))
-                print(f"    Label: {label}")
-            else:
-                label = f"{base} ({', '.join(exps_in_base)})"
-                handles.append(patches.Patch(facecolor=base_color[base], label=label))
-                print(f"    Label: {label}")
+        # experiment legend grouped by well letter (B, C, D, E get different colors)
+        for letter in unique_letters:
+            exps_with_letter = sorted([e for e in unique_exps if exp_to_letter[e] == letter])
+            print(f"  Letter: {letter} -> experiments: {len(exps_with_letter)}")
+            
+            label = f"Well {letter}"
+            handles.append(patches.Patch(facecolor=letter_color[letter], label=label))
+            print(f"    Label: {label}")
 
         # category legend (fixed mapping)
         for k in ["Neg", "Pos", "High", "NA"]:
@@ -2526,11 +2811,22 @@ class Batch_Experiment(object):
         s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
 
         ax = s.ax_heatmap
+        
+        # Get the reordered row indices from the dendrogram
+        reordered_idx = s.dendrogram_row.reordered_ind
+        reordered_row_names = [list(avg_df.index)[i] for i in reordered_idx]
+        
+        print(f"\n=== REORDERING DEBUG ===")
+        print(f"Original order: {list(avg_df.index)[:5]}...")
+        print(f"Reordered indices: {reordered_idx[:5]}...")
+        print(f"Reordered names: {reordered_row_names[:5]}...")
+        print(f"=== END REORDERING ===\n")
+        
         ax.set_yticks(np.arange(len(avg_df.index)) + 0.5)  # +0.5 is important for clustermap
         
-        # Abbreviate row names for display
+        # Abbreviate row names for display - USE REORDERED ORDER
         abbreviated_labels = []
-        for idx in avg_df.index:
+        for idx in reordered_row_names:
             well_part, combo_part = idx.split("_", 1)
             short_name = self.shortened_well_names.get(well_part, well_part)
             short_combo = abbreviate_combo(combo_part)
@@ -2561,11 +2857,18 @@ class Batch_Experiment(object):
             self.draw_cluster_analysis(output_folder=output_folder)
         self.pdf.image(os.path.join(output_folder, "clustermap.jpg"), x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
 
+        # New page for treatment + dose clustering
+        self.new_page("Cluster Analysis - by well")
+        if not os.path.exists(os.path.join(output_folder, "clustermap_treatment.jpg")):
+            self.draw_cluster_analysis_by_well(output_folder=output_folder)
+        self.pdf.image(os.path.join(output_folder, "clustermap_treatment.jpg"), x=0, y=30, w=WORKING_WIDTH,
+                       h=WORKING_HEIGHT)
+
         self.add_category_to_well_info()
         # New page for treatment + dose clustering
         self.new_page("Cluster Analysis - by Treatment + Dose")
         if not os.path.exists(os.path.join(output_folder, "clustermap_treatment_dose.jpg")):
-            self.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder)
+            self.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder, control_channel=self.control_channel)
         self.pdf.image(os.path.join(output_folder, "clustermap_treatment_dose.jpg"), x=0, y=30, w=WORKING_WIDTH,
                        h=WORKING_HEIGHT)
 
@@ -2631,10 +2934,10 @@ class Batch_Experiment(object):
                         parameter]:
                         self.make_y_pos_time_page(parameter, absolute=True, scaled=True)
                 if "average" in param_graphs[parameter]:
-                    self.make_average_page(parameter)
+                    self.make_average_page(parameter,control_channel=self.control_channel)
                     
                 if "absolute_average" in param_graphs[parameter]:
-                    self.make_average_page(parameter, absolute=True)
+                    self.make_average_page(parameter, absolute=True,control_channel=self.control_channel)
                     
                 if self.scratch == True:
                     if "layers" in param_graphs[parameter]:

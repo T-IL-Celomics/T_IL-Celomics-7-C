@@ -95,10 +95,11 @@ class heirarchical_clustering:
         self.summary_table = None
         self.shortened_well_names = {}
 
-    def _infer_dose_by_channel_from_df(self, well_df):
+    def _infer_dose_by_channel_from_df(self, well_df,well,control_channel=None):
         """
         returns dict like {"ch1":"POS", "ch2":"NEG"} based on mode over time.
         if a channel column doesn't exist, it's ignored.
+        if control_channel is specified, that channel is filled with NA (averaged over).
         """
 
         cols = [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in well_df.columns]
@@ -106,17 +107,37 @@ class heirarchical_clustering:
         if not cols or well_df.empty:
             return []
 
-        # ensure no NaNs kill combos
-        tmp = well_df[cols].fillna("NA")
+        # Extract channel names starting at index 22 (each channel is 4 characters)
+        # Channels are at positions: 22-25, 26-29, 30-33
+        channels = [well[22+i*4:22+(i+1)*4] for i in range(3)]
+        
+        # Make a copy to avoid modifying original
+        tmp = well_df[cols].copy().fillna("NA")
+        
+        # Fill control channel with NA if specified
+        if control_channel in channels:
+            idx = channels.index(control_channel)
+            control_col = f"Cha{idx+1}_Category"
+            if control_col in tmp.columns:
+                tmp[control_col] = "NA"
+                # Also fill in the original well_df for filtering later
+                well_df[control_col] = "NA"
 
-        # build combos row-wise, but keep only the channels that exist in this df
+        # build combos row-wise from all columns
         combos = tmp.apply(lambda r: "_".join([str(r[c]) for c in cols]), axis=1)
 
-        # unique combos, drop the all-NA combo if you want
+        # unique combos
         combos = combos.unique().tolist() if hasattr(combos, 'unique') else list(set(combos))
-        # optional: remove all-NA
+        
+        # Remove all-NA combo only if there are other combos available
+        # (keep it if it's the only combo, e.g., when only control channel exists)
         all_na = "_".join(["NA"] * len(cols))
-        combos = [c for c in combos if c != all_na]
+        non_na_combos = [c for c in combos if c != all_na]
+        
+        # If removing all-NA leaves us with no combos, keep the all-NA combo
+        if non_na_combos:
+            combos = non_na_combos
+        # else: keep combos as-is (includes all-NA)
 
         return combos
 
@@ -306,11 +327,34 @@ class heirarchical_clustering:
 
             print("=== DONE ===\n")
 
-    def draw_cluster_analysis_by_treatment_dose(self, output_folder=None):
+    
+
+    def draw_cluster_analysis_by_treatment_dose(self,control_channel=None, output_folder=None):
+        # Helper function to group experiments
+        import re
+        def get_exp_base(exp_name):
+            """Extract well letter + experiment name, removing numbers in between."""
+            # Match: letter(s) followed by any numbers, then the rest
+            group1 = None
+            group2 = None
+            group1 = exp_name[15]
+            group2 = exp_name[22:]
+            if group1 and group2:
+                return group1 + group2  # well letter + experiment name
+            return exp_name  # fallback if pattern doesn't match
+        
+        def get_treatment_only(exp_name):
+            """Extract just the treatment name (starting at position 22), ignoring well letter."""
+            if len(exp_name) > 22:
+                return exp_name[22:]
+            return exp_name
+
         indexes = []
         well_combos = {}
+        treatment_combo_data = {}  # {(exp_base, combo): [(well, combo), ...]}
+        
         for well in self.wells:
-            well_combos[well] = self._infer_dose_by_channel_from_df(self.well_info[well])
+            well_combos[well] = self._infer_dose_by_channel_from_df(self.well_info[well],well,control_channel=control_channel)
 
         print("\n=== DEBUG combos ===")
         print("num wells:", len(self.wells))
@@ -328,9 +372,27 @@ class heirarchical_clustering:
                   [c for c in ["Cha1_Category", "Cha2_Category", "Cha3_Category"] if c in self.well_info[w].columns])
             print(" combos:", well_combos[w][:10])
 
+        # Group wells by experiment base
+        exp_base_map = {}  # {exp_base: [well1, well2, ...]}
         for well in self.wells:
-            for combo in well_combos[well]:
-                indexes.append(f"{well}_{combo}")
+            exp_base = get_exp_base(well)
+            if exp_base not in exp_base_map:
+                exp_base_map[exp_base] = []
+            exp_base_map[exp_base].append(well)
+
+        print(f"\nExperiment bases found: {sorted(exp_base_map.keys())}")
+        for base, wells_list in sorted(exp_base_map.items()):
+            print(f"  {base}: {wells_list}")
+
+        # Build indexes and treatment_combo_data
+        for exp_base, wells_in_group in exp_base_map.items():
+            for well in wells_in_group:
+                for combo in well_combos[well]:
+                    key = (exp_base, combo)
+                    if key not in treatment_combo_data:
+                        treatment_combo_data[key] = []
+                    treatment_combo_data[key].append((well, combo))
+                    indexes.append(f"{exp_base}_{combo}")
 
         print("\n=== DEBUG indexes ===")
         print("num indexes:", len(indexes))
@@ -339,11 +401,16 @@ class heirarchical_clustering:
 
         avg_df = pd.DataFrame(index=indexes, columns=self.parameters)
         avg_df.drop(columns=CLUSTER_DROP_FIELDS, inplace=True, errors="ignore")
-        for well in self.wells:
-            well_df = self.well_info[well]
-            for combo in well_combos[well]:
-                combo_list = combo.split("_")  # get only dose part
+        
+        for (exp_base, combo), well_combo_pairs in treatment_combo_data.items():
+            combo_list = combo.split("_")
+            
+            # Aggregate data from all wells with this exp_base + combo
+            all_filtered_data = []
+            for well, _ in well_combo_pairs:
+                well_df = self.well_info[well]
                 filtered_df = None
+                
                 if len(combo_list) == 1:
                     filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0])]
                 elif len(combo_list) == 2:
@@ -355,31 +422,41 @@ class heirarchical_clustering:
                                           (well_df['Cha3_Category'] == combo_list[2])]
                 else:
                     raise ValueError("wrong number of channels in combo for clustering.")
-                if filtered_df.empty: continue
-                for parameter in CLUSTER_ID_FIELDS:
-                    if parameter in self.parameters:
-                        parameter_array = filtered_df[parameter].dropna()
-                        avg_df.loc[f"{well}_{combo}", parameter] = np.average(parameter_array)
-                cells = filtered_df.Parent.unique()
-                indexed_filtered = filtered_df.set_index("Parent")
-                for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
-                    if parameter in self.parameters:
-                        cell_data = indexed_filtered[parameter].groupby(level=0).first()
-
-                        if parameter in CLUSTER_WAVE_FIELDS:
-                            cell_data = cell_data[cell_data != 0]
-
-                        avg_df.loc[f"{well}_{combo}", parameter] = cell_data.mean()
+                
+                if not filtered_df.empty:
+                    all_filtered_data.append(filtered_df)
+            
+            if not all_filtered_data:
+                continue
+            
+            # Concatenate all data for this combo
+            combined_df = pd.concat(all_filtered_data, ignore_index=True)
+            
+            # Average ID-level fields
+            for parameter in CLUSTER_ID_FIELDS:
+                if parameter in self.parameters:
+                    parameter_array = combined_df[parameter].dropna()
+                    avg_df.loc[f"{exp_base}_{combo}", parameter] = np.average(parameter_array)
+            
+            # Average cell-level fields
+            cells = combined_df.Parent.unique()
+            indexed_combined = combined_df.set_index("Parent")
+            for parameter in CLUSTER_CELL_FIELDS + CLUSTER_WAVE_FIELDS:
+                if parameter in self.parameters:
+                    cell_data = indexed_combined[parameter].groupby(level=0).first()
+                    
+                    if parameter in CLUSTER_WAVE_FIELDS:
+                        cell_data = cell_data[cell_data != 0]
+                    
+                    avg_df.loc[f"{exp_base}_{combo}", parameter] = cell_data.mean()
+        
         scaler = StandardScaler(with_std=True)
 
-        new_index = []
-        for old_idx in avg_df.index:
-            well_part, combo_part = old_idx.split("_", 1)
-            short_name = self.shortened_well_names.get(well_part, well_part)
-            new_index.append(f"{short_name}_{combo_part}")
+        # Remove duplicates from index
+        avg_df = avg_df[~avg_df.index.duplicated(keep='first')]
 
         if avg_df.shape[0] == 0:
-            print("No (well, combo) indexes were generated -> skipping clustering page")
+            print("No (exp_base, combo) indexes were generated -> skipping clustering page")
             return
 
         # Remove columns with all NaN values
@@ -421,7 +498,7 @@ class heirarchical_clustering:
             # Replace infinite values with large but finite values
             scaled_data = np.where(np.isinf(scaled_data), np.sign(scaled_data) * 1e10, scaled_data)
 
-        avg_df = pd.DataFrame(scaled_data, columns=avg_df.columns, index=new_index)
+        avg_df = pd.DataFrame(scaled_data, columns=avg_df.columns, index=avg_df.index)
         print(f"Final avg_df shape before linkage: {avg_df.shape}")
         print(f"Data contains NaN: {avg_df.isna().any().any()}")
         print(f"Data contains inf: {np.isinf(avg_df.values).any()}")
@@ -438,7 +515,7 @@ class heirarchical_clustering:
         # Convert hex colors to RGBA tuples for proper matplotlib rendering
         cat_color = {k: hex_to_rgba(v) for k, v in cat_color_hex.items()}
 
-        row_names = list(avg_df.index)  # these are your plotted rows: "<exp>_<combo>"
+        row_names = list(avg_df.index)  # these are your plotted rows: "<exp_base>_<combo>"
 
         # experiment = text before first "_" in the row label
         exp_names = [rn.split("_", 1)[0] for rn in row_names]
@@ -450,37 +527,42 @@ class heirarchical_clustering:
         print(f"Sample row names: {row_names[:5]}")
         print(f"Unique experiments: {unique_exps}")
 
-        # Group experiments by well letter + experiment name (ignoring numbers in between)
-        # e.g., c03METRNNIRNOCO and c02METRNNIRNOCO group as "cMETRNNIRNOCO"
-        import re
-        def get_exp_base(exp_name):
-            """Extract well letter + experiment name, removing numbers in between."""
-            # Match: letter(s) followed by any numbers, then the rest
-            match = re.match(r'^([a-z]+)\d+(.*)$', exp_name, re.IGNORECASE)
-            if match:
-                return match.group(1) + match.group(2)  # well letter + experiment name
-            return exp_name  # fallback if pattern doesn't match
+        # Group experiments by well letter only (first character) for color assignment
+        # exp_name format: "CGABYNNIRNOCONNN0NNN0WH00" -> well letter is first char (C, D, E, B)
+        exp_to_letter = {}
+        for e in unique_exps:
+            # First char is well letter (C, D, E, B)
+            exp_to_letter[e] = e[0] if len(e) > 0 else e
+        
+        unique_letters = sorted(set(exp_to_letter.values()))
 
-        exp_bases = {e: get_exp_base(e) for e in unique_exps}
-        unique_bases = sorted(set(exp_bases.values()))
+        print(f"Unique well letters (for coloring): {unique_letters}")
+        print(f"Experiment to letter mapping:")
+        for exp, letter in sorted(exp_to_letter.items()):
+            print(f"  {exp[:40]}... -> {letter}")
 
-        print(f"Experiment bases (after grouping): {len(unique_bases)}")
-        print(f"Experiment base mapping:")
-        for exp, base in sorted(exp_bases.items()):
-            print(f"  {exp} -> {base}")
+        # give each unique well letter a unique color (convert to RGBA to match cat_color format)
+        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_letters)))
+        # Convert RGB to RGBA (add alpha=1.0)
+        letter_color = {l: (exp_palette[i][0], exp_palette[i][1], exp_palette[i][2], 1.0) for i, l in enumerate(unique_letters)}
 
-        # give each unique experiment base a unique color
-        exp_palette = sns.color_palette("tab20", n_colors=max(3, len(unique_bases)))
-        base_color = {b: exp_palette[i] for i, b in enumerate(unique_bases)}
+        print(f"Letter color assignment:")
+        for letter, color in sorted(letter_color.items()):
+            print(f"  {letter} -> color {list(letter_color.keys()).index(letter)}")
 
-        print(f"Base color assignment:")
-        for base, color in sorted(base_color.items()):
-            print(f"  {base} -> {color}")
-
-        # Each experiment gets the color of its base
-        exp_color = {e: base_color[exp_bases[e]] for e in unique_exps}
+        # Each experiment gets the color of its well letter
+        exp_color = {e: letter_color[exp_to_letter[e]] for e in unique_exps}
 
         exp_colors = pd.Series([exp_color[e] for e in exp_names], index=row_names, name="Experiment")
+        
+        print(f"\n=== ROW COLOR ASSIGNMENT ===")
+        for i, rn in enumerate(row_names):
+            exp_name = exp_names[i]
+            letter = exp_to_letter[exp_name]
+            color_idx = list(letter_color.keys()).index(letter) if letter in letter_color else -1
+            print(f"  Row: {rn[:40]}... -> letter: {letter} -> color_idx: {color_idx}")
+        print(f"=== END ROW COLOR ASSIGNMENT ===\n")
+        
         print(f"=== END EXPERIMENT GROUPING ===\n")
 
         def parse_combo(rn: str):
@@ -497,6 +579,15 @@ class heirarchical_clustering:
                                 index=row_names, name="Cha3")
 
         row_colors = pd.concat([exp_colors, cha1_colors, cha2_colors, cha3_colors], axis=1)
+        
+        # Ensure row_colors index matches avg_df index exactly
+        row_colors = row_colors.reindex(avg_df.index)
+        
+        print(f"\n=== ROW COLORS VERIFICATION ===")
+        print(f"avg_df.index: {list(avg_df.index)[:5]}...")
+        print(f"row_colors.index: {list(row_colors.index)[:5]}...")
+        print(f"Indexes match: {list(avg_df.index) == list(row_colors.index)}")
+        print(f"=== END VERIFICATION ===\n")
 
         s = sns.clustermap(data=avg_df, row_linkage=linkaged_pca, cmap=sns.color_palette("coolwarm", n_colors=256),
                            vmin=-2, vmax=2, figsize=(30, 15),
@@ -525,20 +616,16 @@ class heirarchical_clustering:
         handles = []
 
         print(f"\n=== LEGEND CREATION DEBUG ===")
-        print(f"Creating legend entries for {len(unique_bases)} experiment bases:")
+        print(f"Creating legend entries for {len(unique_letters)} well letters:")
 
-        # experiment legend grouped by base experiment (well letter + name, ignoring numbers)
-        for base in unique_bases:
-            exps_in_base = sorted([e for e in unique_exps if exp_bases[e] == base])
-            print(f"  Base: {base} -> variants: {exps_in_base}")
-            if len(exps_in_base) == 1:
-                label = f"{exps_in_base[0]}"
-                handles.append(patches.Patch(facecolor=base_color[base], label=label))
-                print(f"    Label: {label}")
-            else:
-                label = f"{base} ({', '.join(exps_in_base)})"
-                handles.append(patches.Patch(facecolor=base_color[base], label=label))
-                print(f"    Label: {label}")
+        # experiment legend grouped by well letter (B, C, D, E get different colors)
+        for letter in unique_letters:
+            exps_with_letter = sorted([e for e in unique_exps if exp_to_letter[e] == letter])
+            print(f"  Letter: {letter} -> experiments: {len(exps_with_letter)}")
+            
+            label = f"Well {letter}"
+            handles.append(patches.Patch(facecolor=letter_color[letter], label=label))
+            print(f"    Label: {label}")
 
         # category legend (fixed mapping)
         for k in ["Neg", "Pos", "High", "NA"]:
@@ -603,11 +690,22 @@ class heirarchical_clustering:
         s.ax_heatmap.set_xticklabels(s.ax_heatmap.get_xticklabels(), rotation=45, horizontalalignment='right')
 
         ax = s.ax_heatmap
+        
+        # Get the reordered row indices from the dendrogram
+        reordered_idx = s.dendrogram_row.reordered_ind
+        reordered_row_names = [list(avg_df.index)[i] for i in reordered_idx]
+        
+        print(f"\n=== REORDERING DEBUG ===")
+        print(f"Original order: {list(avg_df.index)[:5]}...")
+        print(f"Reordered indices: {reordered_idx[:5]}...")
+        print(f"Reordered names: {reordered_row_names[:5]}...")
+        print(f"=== END REORDERING ===\n")
+        
         ax.set_yticks(np.arange(len(avg_df.index)) + 0.5)  # +0.5 is important for clustermap
         
-        # Abbreviate row names for display
+        # Abbreviate row names for display - USE REORDERED ORDER
         abbreviated_labels = []
-        for idx in avg_df.index:
+        for idx in reordered_row_names:
             well_part, combo_part = idx.split("_", 1)
             short_name = self.shortened_well_names.get(well_part, well_part)
             short_combo = abbreviate_combo(combo_part)
@@ -626,11 +724,11 @@ class heirarchical_clustering:
 if __name__ == "__main__":
     # Update these paths with your actual data locations
     exp_rename_dir = r"D:\\jeries\\renaming"  # Path to folder with renamed experiment files
-    summary_table_folder = r"D:\\jeries\\output_test_2"  # Path to summary table
-    output_folder = r"D:\\jeries\\output_test_2"  # Where to save clustering results
+    summary_table_folder = r"D:\\jeries\\output_test"  # Path to summary table
+    output_folder = r"D:\\jeries\\output_test"  # Where to save clustering results
 
     clustering = heirarchical_clustering(exp_rename_dir=exp_rename_dir, summary_table_folder=summary_table_folder)
     clustering.load_wells_from_summary_table()
     clustering.add_category_to_well_info()
-    clustering.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder)
+    clustering.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder,control_channel="NNIR")
 
