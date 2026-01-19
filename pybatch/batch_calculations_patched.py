@@ -1025,8 +1025,8 @@ class Batch_Experiment(object):
                 self.pdf.cell(col_size, h=10, txt=self.row_names[i], ln=1, align="C")
                 # self.pdf.line(0, self.graph_y_coords[i], 297, self.graph_y_coords[i])
 
-    def write_table_to_pdf(self, columns):
-        y_skip = ((WORKING_HEIGHT - (10 * len(columns))) / 2) - 10
+    def write_table_to_pdf(self, columns, max_font_size=None, row_height=10):
+        y_skip = ((WORKING_HEIGHT - (row_height * len(columns[0]))) / 2) - 10
         self.pdf.ln(h=y_skip)
         longest_row_list = [""] * len(columns)
         for i in range(len(columns[0])):
@@ -1035,15 +1035,16 @@ class Batch_Experiment(object):
                     longest_row_list[j] = columns[j][i]
         longest_row = "".join(longest_row_list)
         ratios = [len(longest_row_list[j]) / len(longest_row) for j in range(len(longest_row_list))]
-        for size in range(self.header_size - 4, 1, -1):
+        start_size = max_font_size if max_font_size else self.header_size - 4
+        for size in range(start_size, 1, -1):
             self.pdf.set_font("arial", "", size)
             if self.pdf.get_string_width(
                     longest_row) < WORKING_WIDTH - 20:  # -20 is just to be sure it doesn't go out of the lines
                 break
         for i in range(len(columns[0])):
             for j in range(len(columns)):
-                self.pdf.cell(WORKING_WIDTH * ratios[j], txt=columns[j][i], h=10, border=1, align="C")
-            self.pdf.ln(h=10)
+                self.pdf.cell(WORKING_WIDTH * ratios[j], txt=columns[j][i], h=row_height, border=1, align="C")
+            self.pdf.ln(h=row_height)
 
     def make_first_page(self):
         self.new_page("Run information")
@@ -1076,7 +1077,8 @@ class Batch_Experiment(object):
         exp_type = ["Exp type"] + [well[-4:] for well in self.wells]
         columns = [initials, exp_num, date, channel, plate_num, locations, cell_line, treatments, exp_type,
                    ["Shortened Name"] + [self.shortened_well_names[well] for well in self.wells]]
-        self.write_table_to_pdf(columns)
+        # Use smaller font for Well information page
+        self.write_table_to_pdf(columns, max_font_size=6, row_height=6)
 
     def draw_sunplot(self, well, output_folder=None, axis1="X", axis2="Y", cell_amount_limit=None):
         fig, graph_ax = plt.subplots()
