@@ -1,0 +1,18 @@
+=== BEST CELLPOSE PARAMETERS (final) ===
+time: 2025-12-19 14:41:52
+study: cellpose3_cyto3_tuning
+model_type: cyto3
+frames_used: 12
+offset (dy,dx): -9,4
+best_trial: 89
+best_mean_dice: 0.734358
+best_mean_iou: 0.5823571969099317
+best_std_dice: 0.04788788560565204
+best_std_iou: 0.0563856849028777
+best_params: {'diameter': 15.67447061185638, 'flow_threshold': 0.9775732908653173, 'cellprob_threshold': -0.6457069150727114, 'min_size': 52}
+
+Files:
+- tuning_out/best_params.json
+- tuning_out/best_params.txt
+- tuning_out/trials_log.csv
+- tuning_out/optuna_cellpose3.sqlite
