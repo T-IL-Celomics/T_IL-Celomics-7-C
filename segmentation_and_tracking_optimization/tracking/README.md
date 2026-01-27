@@ -1,16 +1,4 @@
-Perfect — for the **tracking optimization** README, we’ll document the story exactly as you did it:
 
-1. **Optimize inside Cell-ACDC**
-2. **Extract tracking parameters from Imaris**
-3. **Apply those parameters in Cell-ACDC (TrackPy tracker)**
-4. **Evaluate vs Imaris and iterate**
-
-Below is a clean GitHub-ready `README.md` for your tracking optimization folder.
-
-Put it here:
-`segmentation_and_tracking_optimization/03_tracking/README.md`
-
----
 
 ```md
 # Tracking Optimization (Cell-ACDC TrackPy) Using Imaris Parameters
