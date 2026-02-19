@@ -14,7 +14,7 @@ ROOT_DIR = SCRIPT_DIR / f"{phase_name}_DATA"
 OUTPUT_DIR = SCRIPT_DIR / f"ACDC_IN_{phase_name}"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Regular expression to extract date/time info from filename
+# Regex to extract datetime from filename
 date_pattern = re.compile(r'(\d{4})y(\d{2})m(\d{2})d_(\d{2})h(\d{2})m')
 
 def extract_datetime(file):
@@ -25,7 +25,7 @@ def extract_datetime(file):
     return (0, 0, 0, 0, 0)
 
 # -------------------------------------------------------
-# First collect all fields across all channels
+# Collect all fields across all channels
 # -------------------------------------------------------
 
 fields_dict = {}
@@ -34,7 +34,7 @@ for channel_dir in ROOT_DIR.iterdir():
     if not channel_dir.is_dir():
         continue
 
-    channel_name = channel_dir.name
+    channel_name = channel_dir.name  # GREEN, NIR, ORANGE
 
     for location_dir in channel_dir.iterdir():
         if not location_dir.is_dir():
@@ -52,12 +52,12 @@ for channel_dir in ROOT_DIR.iterdir():
             fields_dict[field_name].append((channel_name, field_dir))
 
 # -------------------------------------------------------
-# Process each field (B2_1, C3_2, etc.)
+# Process each field
 # -------------------------------------------------------
 
 for field_name, channel_entries in fields_dict.items():
 
-    # Decide if field1 or field2
+    # Determine field1 or field2
     if field_name.endswith("_1"):
         parent_folder = "field1"
     elif field_name.endswith("_2"):
@@ -66,17 +66,28 @@ for field_name, channel_entries in fields_dict.items():
         print(f"Skipping unknown field format: {field_name}")
         continue
 
-    # Create output folder: field1/B2_1/Images
-    output_images_dir = OUTPUT_DIR / parent_folder / field_name / "Images"
-    output_images_dir.mkdir(parents=True, exist_ok=True)
+    # Extract location name (B2 from B2_1)
+    location_name = field_name.rsplit("_", 1)[0]
 
     for channel_name, field_dir in channel_entries:
+
+        # Create output folder:
+        # ACDC_IN_PhaseX/field1/B2_1/NIR/Images
+        output_images_dir = (
+            OUTPUT_DIR
+            / parent_folder
+            / field_name
+            / channel_name
+            / "Images"
+        )
+        output_images_dir.mkdir(parents=True, exist_ok=True)
 
         image_files = list(field_dir.glob("*.tif"))
         image_files.sort(key=extract_datetime)
 
+        # Start numbering from 0 (change start=1 if needed)
         for i, img_file in enumerate(image_files):
-            new_name = f"{field_name}_{channel_name}_{i}.tif"
+            new_name = f"{parent_folder}_{location_name}_{channel_name}_{i}.tif"
             dest_path = output_images_dir / new_name
 
             print(f"Copying {img_file} -> {dest_path}")
