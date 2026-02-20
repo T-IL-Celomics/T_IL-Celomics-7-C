@@ -89,3 +89,41 @@ if [ $FAILED -gt 0 ]; then
   echo "WARNING: $FAILED GPU(s) failed!"
   exit 1
 fi
+
+# ========== Merge shard results ==========
+echo ""
+echo "=== Merging shard results ==="
+
+# Merge CSV shards (keep header from first, skip header in rest)
+HEADER_DONE=0
+> best_model_per_feature.csv
+for i in 0 1 2 3; do
+  f="best_model_per_feature_shard${i}.csv"
+  if [ -f "$f" ]; then
+    if [ $HEADER_DONE -eq 0 ]; then
+      cat "$f" >> best_model_per_feature.csv
+      HEADER_DONE=1
+    else
+      tail -n +2 "$f" >> best_model_per_feature.csv
+    fi
+  else
+    echo "WARNING: $f not found"
+  fi
+done
+echo "Merged CSV → best_model_per_feature.csv ($(tail -n +2 best_model_per_feature.csv | wc -l) features)"
+
+# Merge JSON shards using Python (jq may not be installed)
+python3 -c "
+import json, glob
+
+for name in ['best_model_per_feature', 'best_chronos_model_per_feature', 'best_t5_model_per_feature']:
+    merged = {}
+    for shard_file in sorted(glob.glob(f'{name}_shard*.json')):
+        with open(shard_file) as f:
+            merged.update(json.load(f))
+    with open(f'{name}.json', 'w') as f:
+        json.dump(merged, f, indent=4)
+    print(f'Merged {len(merged)} entries → {name}.json')
+"
+
+echo "=== Merge complete ==="

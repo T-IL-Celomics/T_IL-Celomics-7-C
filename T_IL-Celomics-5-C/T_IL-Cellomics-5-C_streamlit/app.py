@@ -518,6 +518,10 @@ def get_pipeline_env(script_key: str) -> dict:
         dose_path = st.session_state.get("dose_csv_path", "")
         if dose_path.strip():
             env["PIPELINE_DOSE_CSV"] = dose_path.strip()
+        else:
+            _auto_dose = _find_file("dose_dependency_summary_all_wells.csv")
+            if _auto_dose.exists():
+                env["PIPELINE_DOSE_CSV"] = str(_auto_dose)
         control_ch = st.session_state.get("param_control_channel", "")
         if control_ch.strip():
             env["PIPELINE_CONTROL_CHANNEL"] = control_ch.strip()
@@ -546,6 +550,10 @@ def get_pipeline_env(script_key: str) -> dict:
         dose_path = st.session_state.get("dose_csv_path", "")
         if dose_path.strip():
             env["PIPELINE_DOSE_CSV"] = dose_path.strip()
+        else:
+            _auto_dose = _find_file("dose_dependency_summary_all_wells.csv")
+            if _auto_dose.exists():
+                env["PIPELINE_DOSE_CSV"] = str(_auto_dose)
         control_ch = st.session_state.get("param_control_channel", "")
         if control_ch.strip():
             env["PIPELINE_CONTROL_CHANNEL"] = control_ch.strip()

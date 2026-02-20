@@ -15,7 +15,16 @@ import os
 os.makedirs("fitting", exist_ok=True)
 
 # === 0. Load dose information if available ===
-_dose_csv = os.environ.get("PIPELINE_DOSE_CSV", "cell_data/dose_dependency_summary_all_wells.csv")
+_dose_csv = os.environ.get("PIPELINE_DOSE_CSV", "")
+if not _dose_csv:
+    # Auto-detect: check cell_data/ first, then project root
+    for _candidate in ["cell_data/dose_dependency_summary_all_wells.csv",
+                       "dose_dependency_summary_all_wells.csv"]:
+        if os.path.isfile(_candidate):
+            _dose_csv = _candidate
+            break
+    else:
+        _dose_csv = "cell_data/dose_dependency_summary_all_wells.csv"  # fallback (will trigger FileNotFoundError)
 _control_channel = os.environ.get("PIPELINE_CONTROL_CHANNEL", "").strip()
 
 
@@ -46,16 +55,25 @@ def _control_cha_col(experiment_id: str, control_name: str) -> str:
 
 
 def _make_dose_label(row, cols=None):
-    """Build pipe-delimited DoseLabel, excluding the control channel."""
+    """Build pipe-delimited DoseLabel using real channel names from the
+    experiment ID (e.g. 'METR:Pos|GABY:Low') instead of generic Cha1/Cha2.
+
+    The control channel is excluded so labels only show treatment channels.
+    """
     if cols is None:
         cols = [c for c in row.index if c.endswith("_Category")]
-    skip = _control_cha_col(str(row["Experiment"]), _control_channel)
+    exp_id = str(row["Experiment"])
+    channels = _parse_channels(exp_id)          # e.g. ['METR', 'NNIR']
+    skip = _control_cha_col(exp_id, _control_channel)
     parts = []
     for c in cols:
         if c == skip:
             continue
         if pd.notna(row[c]):
-            parts.append(f"{c.replace('_Category', '')}:{row[c]}")
+            # Map Cha<n>_Category → real channel name
+            idx = int(c.replace("Cha", "").replace("_Category", "")) - 1
+            name = channels[idx] if idx < len(channels) else c.replace("_Category", "")
+            parts.append(f"{name}:{row[c]}")
     return "|".join(parts)
 
 
@@ -284,23 +302,34 @@ for best_k in best_k_values:
         plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_by_Treatment_k{best_k}.png")
         plt.show()
 
-    # Plot by dose if available
-    from scipy.stats import f_oneway
-    
-    if dose_data is not None:
-        doses_present = [d for d in pca_df["DoseLabel"].unique() if pd.notna(d) and d != ""]
-        
-        if len(doses_present) > 0:
-            n_d = len(doses_present)
-            ncols_dose = math.ceil(math.sqrt(n_d))
-            nrows_dose = math.ceil(n_d / ncols_dose)
+    # ── Per-treatment dose analysis (only meaningful within each treatment) ──
+    if dose_data is not None and n_t > 0:
+        print(f"\n{'='*60}")
+        print(f"Dose analysis per treatment (k={best_k})")
+        print(f"{'='*60}\n")
 
-            fig, axes = plt.subplots(nrows_dose, ncols_dose, figsize=(6*ncols_dose, 5*nrows_dose), sharex=True, sharey=True)
+        for treatment in treatments_present:
+            treatment_data = pca_df[pca_df["Treatment"] == treatment].copy()
+            treatment_doses = sorted(
+                [d for d in treatment_data["DoseLabel"].unique() if pd.notna(d) and d != ""]
+            )
+
+            if len(treatment_doses) == 0:
+                continue
+
+            # --- PCA scatter per dose combination within this treatment ---
+            n_td = len(treatment_doses)
+            ncols_td = math.ceil(math.sqrt(n_td))
+            nrows_td = math.ceil(n_td / ncols_td)
+
+            fig, axes = plt.subplots(nrows_td, ncols_td,
+                                     figsize=(6*ncols_td, 5*nrows_td),
+                                     sharex=True, sharey=True)
             axes = np.array(axes).reshape(-1)
 
-            for i, dose in enumerate(doses_present):
+            for i, dose in enumerate(treatment_doses):
                 ax = axes[i]
-                subset = pca_df[pca_df["DoseLabel"] == dose]
+                subset = treatment_data[treatment_data["DoseLabel"] == dose]
 
                 for j in range(best_k):
                     cdata = subset[subset["Cluster"] == j]
@@ -312,112 +341,81 @@ for best_k in best_k_values:
                         label=f"Cluster {j}" if i == 0 else None
                     )
 
-                ax.set_title(f"Dose: {dose}")
+                ax.set_title(dose)
                 ax.set_xlabel(f"PC1 ({explained[0]:.1f}%)")
                 ax.set_ylabel(f"PC2 ({explained[1]:.1f}%)")
                 ax.grid(True)
 
-            # delete unused axes
-            for j in range(n_d, len(axes)):
+            for j in range(n_td, len(axes)):
                 fig.delaxes(axes[j])
 
             fig.legend(loc="upper right")
-            plt.suptitle(f"PCA Clustering by Dose (k={best_k})", fontsize=16)
+            plt.suptitle(f"{treatment} – PCA by Dose (k={best_k})", fontsize=16)
             plt.tight_layout(rect=[0, 0, 1, 0.95])
-            plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_by_Dose_k{best_k}.png")
+            plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_k{best_k}_{treatment}_by_dose.png")
             plt.show()
 
-            # Create contingency table: Dose vs Cluster
-            contingency = pca_df.pivot_table(
+            # --- Contingency table & heatmap for this treatment ---
+            treatment_contingency = treatment_data.pivot_table(
                 index="DoseLabel",
                 columns="Cluster",
                 values="Parent",
                 aggfunc="nunique",
                 fill_value=0,
             )
-            
-            print(f"\nCluster vs Dose contingency table (k={best_k}):")
-            print(contingency)
-            contingency.to_csv(f"fitting/cluster_vs_dose_k{best_k}.csv")
-            print(f"Saved cluster_vs_dose_k{best_k}.csv")
 
-            # Plot heatmap: Dose vs Cluster
-            plt.figure(figsize=(6, 4))
-            plt.imshow(contingency, aspect="auto", cmap="YlOrRd")
-            plt.colorbar(label="Number of cells")
-            plt.xticks(range(len(contingency.columns)), contingency.columns)
-            plt.yticks(range(len(contingency.index)), contingency.index)
-            plt.xlabel("Cluster")
-            plt.ylabel("Dose")
-            plt.title(f"Cell counts: Dose vs Cluster (k={best_k})")
-            plt.tight_layout()
-            plt.savefig(f"fitting/cluster_vs_dose_heatmap_k{best_k}.png", dpi=300)
+            treatment_contingency.to_csv(
+                f"fitting/cluster_vs_dose_k{best_k}_{treatment}.csv"
+            )
+            print(f"{treatment} – Cluster vs Dose counts:")
+            print(treatment_contingency)
+
+            # Row-normalised heatmap (% of cells in each dose → cluster)
+            row_pct = treatment_contingency.div(
+                treatment_contingency.sum(axis=1), axis=0
+            ) * 100
+
+            fig, (ax_abs, ax_pct) = plt.subplots(
+                1, 2, figsize=(5 + 5, max(3, 0.6 * len(treatment_contingency))),
+            )
+
+            # Absolute counts
+            im1 = ax_abs.imshow(treatment_contingency.values, aspect="auto", cmap="YlOrRd")
+            fig.colorbar(im1, ax=ax_abs, label="# cells")
+            ax_abs.set_xticks(range(len(treatment_contingency.columns)))
+            ax_abs.set_xticklabels([f"C{c}" for c in treatment_contingency.columns])
+            ax_abs.set_yticks(range(len(treatment_contingency.index)))
+            ax_abs.set_yticklabels(treatment_contingency.index, fontsize=8)
+            ax_abs.set_xlabel("Cluster")
+            ax_abs.set_title("Cell count")
+            for r in range(treatment_contingency.shape[0]):
+                for c_idx in range(treatment_contingency.shape[1]):
+                    ax_abs.text(c_idx, r, str(treatment_contingency.values[r, c_idx]),
+                                ha="center", va="center", fontsize=8)
+
+            # Percentage
+            im2 = ax_pct.imshow(row_pct.values, aspect="auto", cmap="YlOrRd",
+                                vmin=0, vmax=100)
+            fig.colorbar(im2, ax=ax_pct, label="% of dose group")
+            ax_pct.set_xticks(range(len(row_pct.columns)))
+            ax_pct.set_xticklabels([f"C{c}" for c in row_pct.columns])
+            ax_pct.set_yticks(range(len(row_pct.index)))
+            ax_pct.set_yticklabels(row_pct.index, fontsize=8)
+            ax_pct.set_xlabel("Cluster")
+            ax_pct.set_title("Row %")
+            for r in range(row_pct.shape[0]):
+                for c_idx in range(row_pct.shape[1]):
+                    ax_pct.text(c_idx, r, f"{row_pct.values[r, c_idx]:.0f}%",
+                                ha="center", va="center", fontsize=8)
+
+            plt.suptitle(f"{treatment} – Dose vs Cluster (k={best_k})", fontsize=13)
+            plt.tight_layout(rect=[0, 0, 1, 0.93])
+            plt.savefig(
+                f"fitting/cluster_vs_dose_heatmap_k{best_k}_{treatment}.png",
+                dpi=300,
+            )
             plt.close()
-            print(f"Saved cluster_vs_dose_heatmap_k{best_k}.png")
-        
-        # Per-treatment dose analysis
-        if n_t > 0:
-            print(f"\n{'='*60}")
-            print(f"Dose analysis per treatment (k={best_k})")
-            print(f"{'='*60}\n")
-        
-            for treatment in treatments_present:
-                treatment_data = pca_df[pca_df["Treatment"] == treatment].copy()
-                treatment_doses = [d for d in treatment_data["DoseLabel"].unique() if pd.notna(d) and d != ""]
-                
-                if len(treatment_doses) == 0:
-                    continue
-                    
-                n_td = len(treatment_doses)
-                ncols_td = math.ceil(math.sqrt(n_td))
-                nrows_td = math.ceil(n_td / ncols_td)
-
-                fig, axes = plt.subplots(nrows_td, ncols_td, figsize=(6*ncols_td, 5*nrows_td), sharex=True, sharey=True)
-                axes = np.array(axes).reshape(-1)
-
-                for i, dose in enumerate(treatment_doses):
-                    ax = axes[i]
-                    subset = treatment_data[treatment_data["DoseLabel"] == dose]
-
-                    for j in range(best_k):
-                        cdata = subset[subset["Cluster"] == j]
-                        ax.scatter(
-                            cdata["PC1"], cdata["PC2"],
-                            color=colors[j],
-                            edgecolors="black", linewidths=0.3,
-                            s=40, alpha=0.7,
-                            label=f"Cluster {j}" if i == 0 else None
-                        )
-
-                    ax.set_title(f"{dose}")
-                    ax.set_xlabel(f"PC1 ({explained[0]:.1f}%)")
-                    ax.set_ylabel(f"PC2 ({explained[1]:.1f}%)")
-                    ax.grid(True)
-
-                # delete unused axes
-                for j in range(n_td, len(axes)):
-                    fig.delaxes(axes[j])
-
-                if n_td > 0:
-                    fig.legend(loc="upper right")
-                    plt.suptitle(f"{treatment} - PCA by Dose (k={best_k})", fontsize=16)
-                    plt.tight_layout(rect=[0, 0, 1, 0.95])
-                    plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_k{best_k}_{treatment}_by_dose.png")
-                    plt.show()
-
-                    # Contingency per treatment
-                    treatment_contingency = treatment_data.pivot_table(
-                        index="DoseLabel",
-                        columns="Cluster",
-                        values="Parent",
-                        aggfunc="nunique",
-                        fill_value=0,
-                    )
-                    
-                    treatment_contingency.to_csv(f"fitting/cluster_vs_dose_k{best_k}_{treatment}.csv")
-                    print(f"{treatment} - Cluster vs Dose counts:")
-                    print(treatment_contingency)
-                    print()
+            print(f"Saved cluster_vs_dose_heatmap_k{best_k}_{treatment}.png\n")
 
     # Merge with original experiment data
     df_data_copy = df_data.copy()

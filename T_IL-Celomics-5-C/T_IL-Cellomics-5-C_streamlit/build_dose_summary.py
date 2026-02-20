@@ -136,6 +136,14 @@ def build_dose_summary():
 
     summary.to_csv(OUTPUT_CSV, index=False)
     print(f"\n✅ Saved {OUTPUT_CSV}  ({len(summary)} rows)")
+
+    # Also copy to cell_data/ so downstream scripts find it by default
+    _cell_data_copy = os.path.join("cell_data", os.path.basename(OUTPUT_CSV))
+    if os.path.isdir("cell_data"):
+        import shutil
+        shutil.copy2(OUTPUT_CSV, _cell_data_copy)
+        print(f"   ↳ Copied to {_cell_data_copy}")
+
     return summary
 
 
