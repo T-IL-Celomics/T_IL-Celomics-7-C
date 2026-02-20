@@ -1950,3 +1950,96 @@ def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label="",
                 plt.close(fig_dc)
 
     return groups, pca_transformed[:, 0], pca_transformed[:, 1]
+
+
+def dose_combo_kmeans(dsn_combo, feature_cols, k_cluster=3,
+                      combo_label="", well_label=""):
+    """
+    Run independent PCA + K-means on cells belonging to a single DoseCombo
+    within a single well letter.
+
+    Parameters
+    ----------
+    dsn_combo : pd.DataFrame
+        Rows of dataSpecGraphN for one (WellLetter, DoseCombo) group.
+    feature_cols : list[str]
+        Feature column names (e.g. Features[:-1]).
+    k_cluster : int
+        Number of clusters.
+    combo_label : str
+        DoseCombo value (used in titles).
+    well_label : str
+        Well letter (used in titles).
+
+    Returns
+    -------
+    groups : np.ndarray or None
+        Per-row cluster labels (sorted by centre sum), or *None* when
+        there are too few rows to cluster.
+    """
+    with st.spinner(
+        f"Running K-means for combo {combo_label} in well row {well_label}..."
+    ):
+        available = [c for c in feature_cols if c in dsn_combo.columns]
+        data = dsn_combo[available].apply(pd.to_numeric, errors="coerce").fillna(0.0)
+
+        effective_k = min(k_cluster, data.shape[0])
+        if effective_k < 2:
+            st.info(
+                f"Only {data.shape[0]} cell(s) in combo **{combo_label}** "
+                f"(well {well_label}) — cannot cluster."
+            )
+            return None
+
+        # Z-score
+        scaler = StandardScaler(with_std=True)
+        data_scaled = pd.DataFrame(
+            scaler.fit_transform(data), columns=data.columns, index=data.index,
+        )
+
+        # PCA
+        pca = decomposition.PCA(random_state=42)
+        pca.fit(data_scaled)
+        pca_transformed = pca.transform(data_scaled)
+        n_sig = max(2, int(np.sum(pca.explained_variance_ratio_ >= 0.1)))
+        pca_exp_var = pca.explained_variance_ratio_ * 100
+        pca_sig = pca_transformed[:, :n_sig]
+
+        # K-means
+        km = KMeans(n_clusters=effective_k, random_state=0).fit(pca_sig)
+        idx = np.argsort(km.cluster_centers_.sum(axis=1))
+        lut = np.zeros_like(idx)
+        lut[idx] = np.arange(effective_k)
+        groups = lut[km.predict(pca_sig)]
+
+        # Scatter plot
+        PC_cols = [f"PC{i+1}" for i in range(n_sig)]
+        km_df = pd.DataFrame(pca_sig, columns=PC_cols, index=data.index)
+        km_df["Groups"] = groups
+        palette = sns.color_palette("hls", len(np.unique(groups)))
+
+        fig, ax = plt.subplots(figsize=(6.5, 6.5), dpi=200, facecolor="w")
+        sns.scatterplot(
+            x="PC1", y="PC2", hue="Groups", data=km_df,
+            ax=ax, legend="full", palette=palette,
+        )
+        ax.set_title(
+            f"K-means k={effective_k} — {combo_label} (row {well_label})",
+            fontweight="bold", fontsize=16,
+        )
+        ax.set_xlabel(f"PC1 ({pca_exp_var[0]:.2f}%)", fontsize=15)
+        ax.set_ylabel(f"PC2 ({pca_exp_var[1]:.2f}%)", fontsize=15)
+        leg_texts = ax.get_legend().texts if ax.get_legend() else []
+        ncol = 3 if len(leg_texts) > 25 else (2 if len(leg_texts) > 17 else 1)
+        ax.legend(
+            bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0,
+            ncol=ncol, framealpha=1, edgecolor="black",
+        )
+        centres = km.cluster_centers_
+        ax.scatter(centres[:, 0], centres[:, 1], c="black", s=25)
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+        st.pyplot(fig)
+        plt.close(fig)
+
+    return groups

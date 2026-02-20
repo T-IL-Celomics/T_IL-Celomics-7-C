@@ -655,6 +655,42 @@ def run_analysis(
               else:
                   pca_sub["Groups"] = dsn_sub["Groups"].values
 
+              # ── Per-combo K-means within this well row ────────────
+              combos_in_wl = sorted(dsn_sub["DoseCombo"].dropna().unique())
+              if combos_in_wl:
+                  st.markdown(
+                      f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Combo\\ "
+                      f"K\\text{{-}}Means\\ Clustering\\ (row\\ {wl})}}$$"
+                  )
+                  for combo_val in combos_in_wl:
+                      combo_mask = dsn_sub["DoseCombo"] == combo_val
+                      dsn_combo = dsn_sub[combo_mask].copy()
+                      if len(dsn_combo) < 2:
+                          st.info(
+                              f"Combo **{combo_val}** has only "
+                              f"{len(dsn_combo)} cell(s) — skipping."
+                          )
+                          continue
+
+                      st.markdown(
+                          f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$"
+                      )
+                      f.write(markdown.markdown(
+                          f"Figure {FigureNumber} — Well {wl}, "
+                          f"Combo {combo_val}: K-means"
+                      ))
+                      st.markdown(
+                          f"**Combo: {combo_val}**  "
+                          f"({len(dsn_combo)} cells)"
+                      )
+                      FigureNumber += 1
+                      dose_combo_kmeans(
+                          dsn_combo, Features[:-1],
+                          k_cluster=k_cluster,
+                          combo_label=combo_val,
+                          well_label=wl,
+                      )
+
               # 1) Cluster distribution bar chart
               st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
               f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Cluster Distribution"))
