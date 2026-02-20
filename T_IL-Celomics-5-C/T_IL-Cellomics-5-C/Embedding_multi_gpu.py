@@ -11,6 +11,13 @@ import multiprocessing as mp
 
 from chronos import BaseChronosPipeline
 
+BOLT_TO_T5_MAP = {
+    "ChronosBoltTiny":  "ChronosT5Tiny",
+    "ChronosBoltMini":  "ChronosT5Small",
+    "ChronosBoltSmall": "ChronosT5Small",
+    "ChronosBoltBase":  "ChronosT5Base"
+}
+
 
 model_name_map = {
     "ChronosT5Tiny": "amazon/chronos-t5-tiny",
@@ -31,6 +38,14 @@ model_name_map = {
     "TimesFM_2_0_500m": "google/timesfm-2.0-500m"
 }
 
+def normalize_model_name(model_name: str) -> str:
+    # if someone gave a Bolt model, convert it to T5
+    if model_name.startswith("ChronosBolt"):
+        return BOLT_TO_T5_MAP[model_name]
+    return model_name
+
+
+
 def infer_source(model_name: str) -> str:
     if model_name.startswith("Chronos"):
         return "chronos"
@@ -42,6 +57,7 @@ def infer_source(model_name: str) -> str:
         raise ValueError(f"cannot infer source from model name: {model_name}")
 
 def load_model(model_name: str, source: str):
+    model_name = normalize_model_name(model_name)
     hf_model_id = model_name_map[model_name]
 
     return BaseChronosPipeline.from_pretrained(
@@ -70,19 +86,6 @@ def cell_key(exp: str, parent: str) -> str:
 def split_list(lst, n):
     n = max(1, int(n))
     return [lst[i::n] for i in range(n)]
-
-
-def _gpu_worker(gid, feats, outp, dim, verbose, df, feature_model_dict):
-    """Top-level function so multiprocessing 'spawn' can pickle it."""
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gid)
-    compute_embeddings_for_features(
-        df=df,
-        feature_model_dict=feature_model_dict,
-        features_subset=feats,
-        dim=dim,
-        out_partial_path=outp,
-        verbose=verbose
-    )
 
 def compute_embeddings_for_features(
     df: pd.DataFrame,
@@ -205,31 +208,17 @@ def merge_partials_and_write_final(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input_csv",
-                    default=os.environ.get("PIPELINE_MERGED_CSV",
-                                           "cell_data/MergedAndFilteredExperiment008.csv"))
-    ap.add_argument("--model_dict",
-                    default=os.environ.get("PIPELINE_CHRONOS_MODEL_DICT",
-                                           "best_t5_model_per_feature.json"))
-    ap.add_argument("--out_final",
-                    default=os.environ.get("PIPELINE_EMBEDDING_JSON",
-                                           "embeddings/summary_table_Embedding.json"))
-    ap.add_argument("--dim", type=int,
-                    default=int(os.environ.get("PIPELINE_UMAP_DIM", "3")))
+    ap.add_argument("--input_csv", default="cell_data/MergedAndFilteredExperiment008.csv")
+    ap.add_argument("--model_dict", default="best_chronos_model_per_feature.json")
+    ap.add_argument("--out_final", default="embeddings/summary_table_Embedding.json")
+    ap.add_argument("--dim", type=int, default=3)
     ap.add_argument("--num_gpus", type=int, default=1)
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     start = time.time()
 
-    if args.input_csv.lower().endswith((".xlsx", ".xls")):
-        df = pd.read_excel(args.input_csv)
-    else:
-        try:
-            df = pd.read_csv(args.input_csv)
-        except UnicodeDecodeError:
-            print(f"[warn] UTF-8 decode failed for {args.input_csv}, retrying with latin-1")
-            df = pd.read_csv(args.input_csv, encoding="latin-1")
+    df = pd.read_csv(args.input_csv)
 
     with open(args.model_dict, "r") as f:
         feature_model_dict = json.load(f)
@@ -268,11 +257,19 @@ def main():
             partial_path = f"embeddings/_partial_gpu{gpu_id}.json"
             partial_paths.append(partial_path)
 
-            p = mp.Process(
-                target=_gpu_worker,
-                args=(gpu_id, feature_chunks[gpu_id], partial_path,
-                      args.dim, args.verbose, df, feature_model_dict)
-            )
+            def _worker(gid, feats, outp, dim, verbose):
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(gid)
+                # now "cuda:0" inside this process == the selected gpu
+                compute_embeddings_for_features(
+                    df=df,
+                    feature_model_dict=feature_model_dict,
+                    features_subset=feats,
+                    dim=dim,
+                    out_partial_path=outp,
+                    verbose=verbose
+                )
+
+            p = mp.Process(target=_worker, args=(gpu_id, feature_chunks[gpu_id], partial_path, args.dim, args.verbose))
             p.start()
             procs.append(p)
 

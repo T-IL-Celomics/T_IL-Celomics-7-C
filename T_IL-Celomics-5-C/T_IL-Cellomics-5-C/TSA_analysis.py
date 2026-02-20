@@ -7,7 +7,8 @@ import pandas as pd
 import torch
 from omegaconf import OmegaConf
 import json
-os.chdir('/content/drive/MyDrive/final_project/T_IL-Cellomics-5-C/')
+import time
+
 # ========== 1) Setup Python path to include MMF repo ==========
 repo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "many-model-forecasting"))
 os.environ["PYTHONPATH"] = repo_path + os.pathsep + os.environ.get("PYTHONPATH", "")
@@ -25,17 +26,21 @@ conf.backtest_length   = 5
 conf.limit_num_series = -1
 
 # ========== 3) Detect GPU ==========
-gpu_available = torch.cuda.is_available()
-device = f"cuda:{torch.cuda.current_device()}" if gpu_available else "cpu"
-print(f"[Main] CUDA available: {gpu_available}, device: {device}")
+
+if not torch.cuda.is_available():
+    raise RuntimeError("cuda not available, refusing to run on cpu")
+device = "cuda:0"
+torch.cuda.set_device(0)
+print(f"[Main] using device: {device}")
+
 
 # ========== 4) Load sample data ==========
-sample_file = "raw_all_cells.csv"
+sample_file = "cell_data/raw_all_cells.csv"
 if not os.path.exists(sample_file):
     raise FileNotFoundError(f"Sample file '{sample_file}' not found.")
 
 # ========== 5) Load selected features ==========
-with open("selected_features.txt", "r") as f:
+with open("cell_data/selected_features.txt", "r") as f:
     features_list = [line.strip() for line in f if line.strip()]
 
 # ========== 6) Preprocess input data ==========
@@ -55,7 +60,9 @@ df_raw = df_raw[df_raw["unique_id"].isin(selected_ids)]
 top_models = {}
 
 # ========== 8) Iterate over each feature ==========
+t_total0 = time.time()
 for feature in features_list:
+    t0 = time.time()
     print(f"\n=== Processing feature: {feature} ===")
     feature_dir = os.path.join("results", feature)
     os.makedirs(feature_dir, exist_ok=True)
@@ -71,7 +78,7 @@ for feature in features_list:
     print(f"Metrics will save into: {forecaster.results_dir}")
 
     forecaster.evaluate_models()
-
+    print(f"[time] feature={feature} evaluate_models: {time.time() - t0:.2f}s")
     rmse_list = []
     chronos_list = []
 
@@ -82,7 +89,7 @@ for feature in features_list:
         if not dfm.empty:
             avg_rmse = dfm["score"].mean()
             rmse_list.append((model_name, avg_rmse))
-            if "chronos" in model_name.lower():
+            if "chronost5" in model_name.lower():
                 chronos_list.append((model_name, avg_rmse))
 
     if not rmse_list:
@@ -161,3 +168,5 @@ with open("best_chronos_model_per_feature.json", "w") as f:
     json.dump(chronos_model_dict, f, indent=4)
 
 print("Saved best model mappings to JSON files.")
+print(f"[time] total runtime: {time.time() - t_total0:.2f}s")
+

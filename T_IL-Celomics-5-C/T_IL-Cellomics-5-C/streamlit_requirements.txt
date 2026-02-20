@@ -60,6 +60,7 @@ gluonts==0.14.4
 chronos-forecasting==1.4.1
 uni2ts==1.2.0
 transformers==4.46.3
+huggingface-hub==0.24.7
 safetensors==0.7.0
 tokenizers==0.20.3
 
@@ -83,5 +84,6 @@ cloudpickle==3.1.2
 fsspec==2023.10.0
 datasets==2.17.1
 
-# HuggingFace (used for embedding)
+# UMAP and HuggingFace (used for embedding)
+umap-learn==0.5.5
 huggingface_hub==0.23.2

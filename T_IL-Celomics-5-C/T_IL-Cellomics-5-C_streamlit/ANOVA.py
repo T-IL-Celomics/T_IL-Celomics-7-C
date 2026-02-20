@@ -1,17 +1,24 @@
 import pandas as pd
 import numpy as np
+import os
 from scipy.stats import f_oneway
 
 # === 1. Load your data ===
-df = pd.read_csv("Merged_Clusters_PCA.csv")
+df = pd.read_csv(
+    os.environ.get("PIPELINE_CLUSTERS_CSV", "Merged_Clusters_PCA.csv"),
+    low_memory=False,
+)
 
 # === 2. Average per unique cell ===
 df_unique = df.groupby(['Experiment', 'Parent', 'Cluster']).mean(numeric_only=True).reset_index()
 print(f"Unique cells: {df_unique.shape[0]}")
 
-# === 3. Define features ===
+# === 3. Define features — only keep numeric columns ===
 exclude_cols = ['Experiment', 'Parent', 'Cluster', 'PC1', 'PC2', 'Treatment', 'dt', 'TimeIndex', 'ID']
-features = [col for col in df_unique.columns if col not in exclude_cols]
+features = [
+    col for col in df_unique.columns
+    if col not in exclude_cols and pd.api.types.is_numeric_dtype(df_unique[col])
+]
 print(f"Number of features: {len(features)}")
 
 # === 4. Compute ANOVA ===
@@ -55,9 +62,11 @@ anova_df = anova_df.set_index('Feature')
 # === 6. Format columns to have nice names ===
 anova_df.columns = pd.MultiIndex.from_tuples(anova_df.columns)
 
-# === 7. Style p-values < 0.05 in blue ===
+# === 7. Style p-values < threshold in blue ===
+_pval_threshold = float(os.environ.get("PIPELINE_ANOVA_PVAL", "0.05"))
+
 def highlight_pval(val):
-    if val < 0.05:
+    if val < _pval_threshold:
         return 'color: blue;'
     return ''
 

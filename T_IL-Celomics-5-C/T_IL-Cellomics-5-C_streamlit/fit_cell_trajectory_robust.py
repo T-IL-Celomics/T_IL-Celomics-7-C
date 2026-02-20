@@ -9,27 +9,42 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.pipeline import Pipeline
 import statsmodels.api as sm
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import plotly.express as px
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import seaborn as sns
 import warnings
 
+os.makedirs("regression", exist_ok=True)
+os.makedirs("figures", exist_ok=True)
+
 warnings.filterwarnings("ignore")
 
 # ========== STEP 1: Define Models ==========
 def linear(x, a, b): return a * x + b
-def exponential(x, a, b): return a * np.exp(b * x)
-def logarithmic(x, a, b): return a * np.log(b * x + 1)
+def exponential(x, a, b):
+    bx = np.clip(b*x, -50, 50)
+    return a * np.exp(bx)
+
+def logarithmic(x, a, b): 
+    z = b * x + 1.0
+    z = np.maximum(z, 1e-12)
+    return a * np.log(z)
 def logistic(x, a, b, c): return c / (1 + a * np.exp(-b * x))
 def power(x, a, b): return a * np.power(x, b)
 def inverse(x, a, b): return a / (x + b)
 def quadratic(x, a, b, c): return a * x**2 + b * x + c
 def sigmoid(x, a, b, c, d): return d + (a - d) / (1.0 + (x / c)**b)
-def gompertz(x, a, b, c): return a * np.exp(-b * np.exp(-c * x))
-def weibull(x, a, b, c): return a - b * np.exp(-c * x**2)
+def gompertz(x, a, b, c):
+    inner = np.clip(-c * x, -50, 50)      # protects exp(inner)
+    e1 = np.exp(inner)                    # exp(-c*x)
+    out = np.clip(-b * e1, -50, 50)       # protects exp(out) too
+    return a * np.exp(out)
+
+def weibull(x, a, b, c):
+    expo = np.clip(-c * (x**2), -50, 50)
+    return a - b * np.exp(expo)
+
 def poly3(x, a, b, c, d): return a * x**3 + b * x**2 + c * x + d
 def poly4(x, a, b, c, d, e): return a * x**4 + b * x**3 + c * x**2 + d * x + e
 
@@ -48,27 +63,84 @@ models = {
     'poly4':       (poly4,       [1, 1, 1, 1, 1]),
 }
 
-def fit_model(model_func, xdata, ydata, p0):
-    _maxfev = int(os.environ.get("PIPELINE_MAXFEV", "10000"))
+BOUNDS = {
+    "linear":      ([-1e6, -1e6], [ 1e6,  1e6]),
+    "quadratic":   ([-1e6, -1e6, -1e6], [1e6, 1e6, 1e6]),
+    "poly3":       ([-1e6]*4, [1e6]*4),
+    "poly4":       ([-1e6]*5, [1e6]*5),
+
+    # keep exponent growth under control
+    "exponential": ([-1e6, -5.0], [1e6, 5.0]),
+
+    # log: require b*x+1 > 0; simplest: force b>=0
+    "logarithmic": ([-1e6, 0.0], [1e6, 1e6]),
+
+    # logistic: a>0, b limited, c positive-ish
+    "logistic":    ([1e-8, -5.0, -1e6], [1e6, 5.0, 1e6]),
+
+    # power: avoid weird fractional powers; force b>=0
+    "power":       ([-1e6, 0.0], [1e6, 10.0]),
+
+    # inverse: avoid division near zero by keeping b away from -x
+    "inverse":     ([-1e6, -1e6], [1e6, 1e6]),
+
+    # sigmoid: keep c>0 and b limited
+    "sigmoid":     ([-1e6, 0.0, 1e-6, -1e6], [1e6, 10.0, 1e6, 1e6]),
+
+    # gompertz: a positive-ish, b positive, c limited
+    "gompertz":    ([-1e6, 1e-8, 0.0], [1e6, 1e6, 5.0]),
+
+    # weibull form you used can blow up; limit c
+    "weibull":     ([-1e6, -1e6, 0.0], [1e6, 1e6, 5.0]),
+}
+
+
+def fit_model(model_func, xdata, ydata, p0, bounds=(-np.inf, np.inf)):
     try:
-        popt, _ = curve_fit(model_func, xdata, ydata, p0=p0, maxfev=_maxfev)
-        y_pred = model_func(xdata, *popt)
+        popt, _ = curve_fit(
+            model_func, xdata, ydata,
+            p0=p0,
+            bounds=bounds,
+            maxfev=3000,
+            method="trf"   # supports bounds reliably
+        )
+
+        # also test the whole intended range (0..max x)
+        x_full = np.linspace(float(np.min(xdata)), float(np.max(xdata)), 200)
+        with np.errstate(all="raise"):
+            y_full = model_func(x_full, *popt)
+        y_full = np.asarray(y_full, dtype=float)
+        if not np.all(np.isfinite(y_full)):
+            return None, None, None, None
+
+
+        # reject unstable models immediately
+        with np.errstate(all="raise"):
+            y_pred = model_func(xdata, *popt)
+
+        y_pred = np.asarray(y_pred, dtype=float)
+        if not np.all(np.isfinite(y_pred)):
+            return None, None, None, None
+
         r2   = r2_score(ydata, y_pred)
         rmse = np.sqrt(mean_squared_error(ydata, y_pred))
-        X_design = np.column_stack([xdata**i for i in range(len(popt))])
-        X_design = sm.add_constant(X_design)
-        pval = sm.OLS(ydata, X_design).fit().f_pvalue
+
+        # pval from OLS here is NOT valid for nonlinear models; don't use it
+        pval = np.nan
+
         return popt, r2, rmse, pval
-    except:
+
+    except Exception:
         return None, None, None, None
+
 
 # ========== STEP 2: Fit & Save CSVs ==========
 csv_exist = (
-    os.path.exists("fitting_all_models.csv")
+    os.path.exists("regression/fitting_all_models.csv")
 )
 
 if not csv_exist:
-    df = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv"))
+    df = pd.read_csv("cell_data/raw_all_cells.csv")
     df["Experiment"] = df["Experiment"].astype(str)
     df["Parent"]     = df["Parent"].astype(str)
 
@@ -88,7 +160,12 @@ if not csv_exist:
             if np.isnan(y).any(): 
                 continue
             for name, (func, p0) in models.items():
-                popt, r2, rmse, pval = fit_model(func, x, y, p0)
+                lb, ub = BOUNDS.get(name, (-np.inf, np.inf))
+                if len(x) <= len(p0):
+                    continue
+
+                popt, r2, rmse, pval = fit_model(func, x, y, p0, bounds=(lb, ub))
+
                 row = {
                     "Experiment": exp, "Parent": parent,
                     "Feature": feat, "Model": name,
@@ -99,19 +176,18 @@ if not csv_exist:
                 all_models.append(row)
 
     df_all = pd.DataFrame(all_models)
-    df_all.to_csv("fitting_all_models.csv", index=False)
-    print("fitting_all_models.csv saved.")
+    df_all.to_csv("regression/fitting_all_models.csv", index=False)
+    print("regression/fitting_all_models.csv saved.")
 else:
-    print("Loading existing fitting_all_models.csv")
-    df_all = pd.read_csv("fitting_all_models.csv")
-
+    print("Loading existing regression/fitting_all_models.csv")
+    df_all = pd.read_csv("regression/fitting_all_models.csv")
 # ========== STEP 3: Select Top Models & Compute NRMSE on df_top3 ==========
 # 1) significant fits
-_pval_threshold = float(os.environ.get("PIPELINE_PVAL_THRESHOLD", "0.05"))
-df_sig = df_all[df_all["pval"] < _pval_threshold].copy()
+df_sig = df_all[(df_all["RMSE"].notna()) & (df_all["R2"] > 0)].copy()
+
 
 # === NEW: compute range for NRMSE on df_sig ===
-raw = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv"))
+raw = pd.read_csv("cell_data/raw_all_cells.csv")
 raw["Experiment"] = raw["Experiment"].astype(str)
 raw["Parent"]     = raw["Parent"].astype(str)
 exclude = {"TimeIndex", "Parent", "Experiment", "unique_id", "ds"}
@@ -148,10 +224,12 @@ df_sig = df_sig.merge(
 )
 
 # compute NRMSE
+df_sig["range"] = df_sig["range"].replace(0, np.nan)
 df_sig["NRMSE"] = df_sig["RMSE"] / df_sig["range"]
+df_sig = df_sig.dropna(subset=["NRMSE"])
 
 # save updated df_sig with NRMSE
-df_sig.to_csv("fitting_significant_models_with_nrmse.csv", index=False)
+df_sig.to_csv("regression/fitting_significant_models_with_nrmse.csv", index=False)
 
 # 2) pick Top‐3 by NRMSE
 df_top3 = (
@@ -172,9 +250,9 @@ df_top1 = (
 )
 
 # 4) save outputs
-df_top3.to_csv("fitting_top3_with_nrmse.csv", index=False)
-df_top1.to_csv("fitting_best_with_nrmse.csv",  index=False)
-print("Saved: fitting_top3_with_nrmse.csv and fitting_best_with_nrmse.csv (based on NRMSE)")
+df_top3.to_csv("regression/fitting_top3_with_nrmse.csv", index=False)
+df_top1.to_csv("regression/fitting_best_with_nrmse.csv",  index=False)
+print("Saved: regression/fitting_top3_with_nrmse.csv and regression/fitting_best_with_nrmse.csv (based on NRMSE)")
 
 # ========== STEP 4: Visualizations ==========
 # Ensure output directory exists
@@ -254,7 +332,8 @@ def plot_stacked_features(df, filename, title, palette_name='Set3'):
       - palette_name: any seaborn categorical palette (e.g. 'Set3','Paired','tab20')
     """
     # filter significant
-    df_plot = df[df["pval"] < 0.05]
+    df_plot = df.dropna(subset=["RMSE", "R2"])
+
     # count & normalize
     counts = df_plot.groupby(["Feature","Model"]).size().unstack(fill_value=0)
     props  = counts.div(counts.sum(axis=1), axis=0)
@@ -285,15 +364,16 @@ def plot_stacked_features(df, filename, title, palette_name='Set3'):
     print(f"Saved {out_path}")
 
 
-plot_stacked_features(df_sig,  "all_models_sig", "Significant Models per Feature (p<0.05)", palette_name='Paired_r')
-plot_stacked_features(df_top3,"top3_models",    "Top 3 Models per Feature",               palette_name='Paired_r')
-plot_stacked_features(df_top1,"best_model",     "Best Model per Feature",                 palette_name='Paired_r')
+plot_stacked_features(df_sig, "all_models_valid", "Valid Fits per Feature", palette_name="Paired_r")
+plot_stacked_features(df_top3, "top3_models", "Top 3 Models per Feature (NRMSE)", palette_name="Paired_r")
+plot_stacked_features(df_top1, "best_model", "Best Model per Feature (NRMSE)", palette_name="Paired_r")
+
 
 
 # 3) Boxplot RMSE by model
 plt.figure(figsize=(12,6))
 sns.boxplot(data=df_sig, x="Model", y="RMSE")
-plt.title("RMSE Distribution by Model (p<0.05)")
+plt.title("RMSE Distribution by Model (valid fits)")
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.savefig("figures/boxplot_rmse_by_model.png", dpi=300)
@@ -310,7 +390,7 @@ plt.errorbar(
 )
 plt.xticks(rotation=45)
 plt.ylabel("Mean RMSE ± STD")
-plt.title("Average RMSE by Model (p<0.05)")
+plt.title("Average RMSE Distribution by Model (valid fits)")
 plt.tight_layout()
 plt.savefig("figures/avg_rmse_by_model.png", dpi=300)
 plt.close()
@@ -325,7 +405,7 @@ plt.errorbar(
 )
 plt.xticks(rotation=45)
 plt.ylabel("Mean R² ± STD")
-plt.title("Average R² by Model (p<0.05)")
+plt.title("Average R² by Model (valid fits)")
 plt.tight_layout()
 plt.savefig("figures/avg_r2_by_model.png", dpi=300)
 plt.close()
@@ -335,7 +415,7 @@ plt.figure(figsize=(14,6))
 sns.boxplot(data=df_sig, x="Feature", y="RMSE")
 plt.xticks(rotation=90)
 plt.ylabel("RMSE")
-plt.title("RMSE Distribution per Feature (p<0.05)")
+plt.title("RMSE Distribution per Feature (valid fits)")
 plt.tight_layout()
 plt.savefig("figures/boxplot_rmse_by_feature.png", dpi=300)
 plt.close()
@@ -360,9 +440,11 @@ df_sig  = add_treatment_column(df_sig)
 df_top3 = add_treatment_column(df_top3)
 df_top1 = add_treatment_column(df_top1)
 
-df_sig_all  = df_sig[df_sig['pval'] < 0.05]
-df_sig_top3 = df_top3[df_top3['pval'] < 0.05]
-df_sig_top1 = df_top1[df_top1['pval'] < 0.05]
+df_sig_all  = df_sig.dropna(subset=["RMSE","R2"])
+df_sig_top3 = df_top3.dropna(subset=["RMSE","R2"])
+df_sig_top1 = df_top1.dropna(subset=["RMSE","R2"])
+
+
 
 param_cols = [c for c in df_sig.columns if c.startswith("param_")]
 
@@ -387,7 +469,7 @@ plot_stacked_treatments(df_sig_top1, "Best_Model")
 def plot_rmse_by_treatment(df, label):
     fig, ax = plt.subplots(figsize=(10,5))
     sns.boxplot(data=df, x='Treatment', y='RMSE', ax=ax)
-    ax.set_title(f'RMSE by Treatment ({label}, p<0.05)')
+    ax.set_title(f'RMSE by Treatment ({label}, valid fits)')
     ax.set_xlabel('Treatment'); ax.set_ylabel('RMSE')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
@@ -668,7 +750,7 @@ for name, df_obj, mf in [
     out_json, imp = create_json(df_obj, num_params=5,
                                 models_per_feature=mf,
                                 transformer=sign_log1p_pipe)
-    path = f"fitting_{name}.json"
+    path = f"fitting/fitting_{name}.json"
     with open(path,"w") as f:
         json.dump(out_json, f, indent=2)
     print(f"Saved {path} (imputed+logged {imp} NaNs)")
@@ -681,13 +763,13 @@ for name, df_obj, mf in [
     out_json, imp = create_json(df_obj, num_params=5,
                                 models_per_feature=mf,
                                 transformer=log_z_pipe)
-    path = f"fitting_{name}.json"
+    path = f"fitting/fitting_{name}.json"
     with open(f"fitting_{name}.json","w") as f:
         json.dump(out_json, f, indent=2)
     print(f"Saved fitting_{name}.json (imputed+logged+z-scaled, {imp} NaNs)")
 
 # ========== STEP 7: Check for null entries in JSON ==========
-with open("fitting_top3_models_log.json") as f:
+with open("fitting/fitting_top3_models_log.json") as f:
     data = json.load(f)
 cnt = sum(
     1

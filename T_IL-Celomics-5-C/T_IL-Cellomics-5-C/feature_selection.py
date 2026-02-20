@@ -14,10 +14,10 @@ import time
 # ───────────────────────────────────────────────────────────────────────────────
 # PARAMETERS
 # ───────────────────────────────────────────────────────────────────────────────
-DATA_FILE = "MergedAndFilteredExperiment008.csv"
-RAW_CSV = "raw_all_cells.csv"
-NORM_CSV = "normalized_all_cells.csv"
-FEATURE_LIST_FILE = "selected_features.txt"
+DATA_FILE = "cell_data/summary_table.xlsx"
+RAW_CSV = "cell_data/raw_all_cells.csv"
+NORM_CSV = "cell_data/normalized_all_cells.csv"
+FEATURE_LIST_FILE = "cell_data/selected_features.txt"
 NORMALIZE_BEFORE_VARIANCE = True
 MAX_LAG = 25
 # Thresholds and constants for filtering
@@ -78,13 +78,53 @@ eval_scores = []
 for k in FEATURE_STEPS:
     print(f"→ Trying k = {k}")
     idxs = np.argsort(loading_sum)[-k:]
-    subset = df[feat_cols].iloc[:, idxs].values
-    km = KMeans(n_clusters=CLUSTERS, random_state=42, n_init=10).fit(subset)
-    score = silhouette_score(subset, km.labels_, sample_size=50000, random_state=42)
-    print(f"Silhouette score = {score}")
-    eval_scores.append((k, score))
+    subset = df[feat_cols].iloc[:, idxs].to_numpy(dtype=float)
+
+    # clean
+    mask = np.isfinite(subset).all(axis=1)
+    subset = subset[mask]
+
+    # if subset is too small, skip
+    if subset.shape[0] < max(CLUSTERS + 1, 3):
+        print("  [skip] not enough rows")
+        eval_scores.append((k, np.nan))
+        continue
+
+    km = KMeans(n_clusters=CLUSTERS, random_state=42, n_init=10)
+    print("  mean std:", float(np.mean(np.std(subset, axis=0))))
+    print("  approx unique rows:", np.unique(np.round(subset, 6), axis=0).shape[0])
+
+    km.fit(subset)
+
+    labels = km.labels_
+    n_labels = np.unique(labels).size
+    print(f"  labels: {n_labels}")
+
+    # ✅ hard guard: silhouette is illegal if only 1 label
+    if n_labels < 2:
+        print("  [skip] silhouette impossible (1 cluster) — using fallback score")
+        # fallback: use negative inertia (bigger is better) so we can still pick best_k
+        eval_scores.append((k, -float(km.inertia_)))
+        continue
+
+    ss = min(50000, subset.shape[0])
+
+    try:
+        score = silhouette_score(subset, labels, sample_size=ss, random_state=42)
+        eval_scores.append((k, float(score)))
+        print(f"  silhouette = {score}")
+    except Exception as e:
+        # last-resort safety
+        print(f"  [skip] silhouette failed: {e}")
+        eval_scores.append((k, -float(km.inertia_)))
 
 ks, scores = zip(*eval_scores)
+scores_arr = np.array(scores, dtype=float)
+if np.all(np.isnan(scores_arr)):
+    print("[WARN] all silhouette scores are NaN. falling back to k=MIN_FEATURES")
+    best_k = MIN_FEATURES
+else:
+    best_k = ks[int(np.nanargmax(scores_arr))]
 
 # ───────────────────────────────────────────────────────────────────────────────
 print("\n=== STEP 2: Spearman Correlation Filter ===")

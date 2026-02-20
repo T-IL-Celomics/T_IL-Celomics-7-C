@@ -2,6 +2,8 @@ import os
 import glob
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -15,18 +17,18 @@ import time
 # PARAMETERS
 # ───────────────────────────────────────────────────────────────────────────────
 DATA_FILE = "MergedAndFilteredExperiment008.csv"
-RAW_CSV = "raw_all_cells.csv"
-NORM_CSV = "normalized_all_cells.csv"
-FEATURE_LIST_FILE = "selected_features.txt"
-NORMALIZE_BEFORE_VARIANCE = True
-MAX_LAG = 25
+RAW_CSV = os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv")
+NORM_CSV = os.environ.get("PIPELINE_NORM_CSV", "normalized_all_cells.csv")
+FEATURE_LIST_FILE = os.environ.get("PIPELINE_FEATURES_FILE", "selected_features.txt")
+NORMALIZE_BEFORE_VARIANCE = os.environ.get("PIPELINE_NORMALIZE_BEFORE_VARIANCE", "True").lower() in ("true", "1", "yes")
+MAX_LAG = int(os.environ.get("PIPELINE_MAX_LAG", "25"))
 # Thresholds and constants for filtering
-PCA_VARIANCE = 0.95      # Or any float < 1 for explained variance
-MIN_FEATURES = 5         # Minimum number of features to keep per step
-CLUSTERS = 3             # For KMeans
-CORR_THRESHOLD = 0.8     # Spearman correlation threshold for removing redundant features
-CONST_CELL_THRESH = 0.99  # % of cells with zero std to define feature as "constant"
-STD_KEEP_THRESH = 0.2   # Average std threshold for keeping variable features
+PCA_VARIANCE = float(os.environ.get("PIPELINE_PCA_VARIANCE", "0.95"))      # Or any float < 1 for explained variance
+MIN_FEATURES = int(os.environ.get("PIPELINE_MIN_FEATURES", "5"))         # Minimum number of features to keep per step
+CLUSTERS = int(os.environ.get("PIPELINE_FS_CLUSTERS", "3"))             # For KMeans
+CORR_THRESHOLD = float(os.environ.get("PIPELINE_CORR_THRESHOLD", "0.8"))     # Spearman correlation threshold for removing redundant features
+CONST_CELL_THRESH = float(os.environ.get("PIPELINE_CONST_CELL_THRESH", "0.99"))  # % of cells with zero std to define feature as "constant"
+STD_KEEP_THRESH = float(os.environ.get("PIPELINE_STD_KEEP_THRESH", "0.2"))   # Average std threshold for keeping variable features
 # ───────────────────────────────────────────────────────────────────────────────
 
 def drop_irrelevant_columns(df):
@@ -230,8 +232,8 @@ plt.savefig("figures/silhouette_plot.png", dpi=300)
 plt.show()
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Save final features
+# Save final features (using the pipeline-configured path)
 # ───────────────────────────────────────────────────────────────────────────────
-with open("cell_data/selected_features.txt", "w") as fh:
+with open(FEATURE_LIST_FILE, "w") as fh:
     fh.write("\n".join(final_features))
-print("\nSaved selected features → selected_features.txt")
+print(f"\nSaved selected features → {FEATURE_LIST_FILE}")

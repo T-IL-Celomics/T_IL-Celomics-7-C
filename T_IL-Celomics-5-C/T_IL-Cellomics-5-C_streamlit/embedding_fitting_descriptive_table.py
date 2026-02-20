@@ -1,7 +1,11 @@
+import os
 import pandas as pd
 
 # === 1. Load merged data ===
-df = pd.read_csv("embedding_fitting_Merged_Clusters_PCA.csv")
+df = pd.read_csv(
+    os.environ.get("PIPELINE_EMBFIT_CLUSTERS_CSV", "embedding_fitting_Merged_Clusters_PCA.csv"),
+    low_memory=False,
+)
 
 # === 2. Columns to exclude ===
 exclude_cols = [
@@ -9,8 +13,11 @@ exclude_cols = [
     'dt', 'TimeIndex', 'ID'
 ]
 
-# === 3. Features list ===
-features = [col for col in df.columns if col not in exclude_cols]
+# === 3. Features list — only keep numeric columns ===
+features = [
+    col for col in df.columns
+    if col not in exclude_cols and pd.api.types.is_numeric_dtype(df[col])
+]
 print(f"Number of features: {len(features)}")
 
 # === 4. First, get unique cells ===
@@ -31,8 +38,9 @@ for cluster, data in grouped_cells.groupby('Cluster'):
         mean = data[feature].mean()
         std = data[feature].std()
         se = std / (len(data) ** 0.5)
-        ci_lower = mean - 1.96 * se
-        ci_upper = mean + 1.96 * se
+        _ci_z = float(os.environ.get("PIPELINE_CI_ZSCORE", "1.96"))
+        ci_lower = mean - _ci_z * se
+        ci_upper = mean + _ci_z * se
         stats[f'{feature}_Mean'] = mean
         stats[f'{feature}_Std'] = std
         stats[f'{feature}_SE'] = se

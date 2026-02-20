@@ -1,5 +1,7 @@
 import json
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -12,21 +14,74 @@ import math
 os.makedirs("clustering", exist_ok=True)
 
 # === 1. Load original experiment data ===
-df_data = pd.read_csv("cell_data/MergedAndFilteredExperiment008.csv")
+_merged_csv = os.environ.get("PIPELINE_MERGED_CSV", "cell_data/MergedAndFilteredExperiment008.csv")
+if _merged_csv.lower().endswith((".xlsx", ".xls")):
+    df_data = pd.read_excel(_merged_csv)
+else:
+    try:
+        df_data = pd.read_csv(_merged_csv)
+    except UnicodeDecodeError:
+        print(f"[warn] UTF-8 decode failed for {_merged_csv}, retrying with latin-1")
+        df_data = pd.read_csv(_merged_csv, encoding="latin-1")
 
 # === 1b. Load dose information ===
+_dose_csv = os.environ.get("PIPELINE_DOSE_CSV", "cell_data/dose_dependency_summary_all_wells.csv")
+_control_channel = os.environ.get("PIPELINE_CONTROL_CHANNEL", "").strip()
+
+
+def _parse_channels(experiment_id: str) -> list:
+    """Extract the list of 4-char channel codes from an experiment ID.
+
+    Format: <name5><date6><4chars><well3><celltype4><ch1><ch2>...NOCO<rest>
+    Everything between position 22 and 'NOCO' is channel codes (4 chars each).
+    """
+    after = experiment_id[22:]
+    noco = after.find("NOCO")
+    if noco < 0:
+        return []
+    return [after[i:i + 4] for i in range(0, noco, 4)]
+
+
+def _control_cha_col(experiment_id: str, control_name: str) -> str:
+    """Return the Cha*_Category column name for the control channel,
+    or '' if not found.  E.g. control_name='NNIR' → 'Cha2_Category'
+    when NNIR is the 2nd channel in the experiment ID."""
+    if not control_name:
+        return ""
+    channels = _parse_channels(experiment_id)
+    for i, ch in enumerate(channels):
+        if ch == control_name:
+            return f"Cha{i + 1}_Category"
+    return ""
+
+
+def _make_dose_label(row, cols=None):
+    """Build pipe-delimited DoseLabel, excluding the control channel."""
+    if cols is None:
+        cols = [c for c in row.index if c.endswith("_Category")]
+    skip = _control_cha_col(str(row["Experiment"]), _control_channel)
+    parts = []
+    for c in cols:
+        if c == skip:
+            continue
+        if pd.notna(row[c]):
+            parts.append(f"{c.replace('_Category', '')}:{row[c]}")
+    return "|".join(parts)
+
+
 try:
-    dose_data = pd.read_csv("cell_data/dose_dependency_summary_all_wells.csv")
+    dose_data = pd.read_csv(_dose_csv)
     # Find all dose label columns (Cha*_Category)
     category_cols = sorted([c for c in dose_data.columns if c.endswith("_Category")])
     
     if category_cols:
         dose_data = dose_data[["Experiment", "Parent"] + category_cols].copy()
         print(f"Loaded dose information with channels: {category_cols}")
-        # Create a combined dose label from all channels
-        dose_data["DoseLabel"] = dose_data[category_cols].apply(
-            lambda row: "|".join([f"{c.replace('_Category', '')}:{row[c]}" for c in category_cols if pd.notna(row[c])]),
-            axis=1
+        if _control_channel:
+            print(f"Control channel to exclude from DoseLabel: {_control_channel}")
+
+        dose_data["DoseLabel"] = dose_data.apply(
+            lambda row: _make_dose_label(row, category_cols), axis=1
         )
     else:
         dose_data = None
@@ -36,12 +91,13 @@ except FileNotFoundError:
     print("Dose file not found, skipping dose analysis")
 
 # === 2. Load embedding JSON ===
-with open("embeddings/summary_table_Embedding.json", "r") as f:
+with open(os.environ.get("PIPELINE_EMBEDDING_JSON", "embeddings/summary_table_Embedding.json"), "r") as f:
     data = json.load(f)
 
-# === 3. Define treatment labels ===
-#treatments = ["NNIRNOCO", "METRNNIRNOCO", "GABYNNIRNOCO", "NNIRMETRGABYNOCO"]
-treatments = ["CON0", "BRCACON1", "BRCACON2", "BRCACON3", "BRCACON4", "BRCACON5"]
+# === 3. Define treatment labels (from env or default) ===
+_treatments_env = os.environ.get("PIPELINE_TREATMENTS", "CON0, BRCACON1, BRCACON2, BRCACON3, BRCACON4, BRCACON5")
+treatments = [t.strip() for t in _treatments_env.split(",") if t.strip()]
+print(f"Treatments: {treatments}")
 
 # === 4. Prepare embedding records ===
 excluded = {"Experiment", "Parent"}
@@ -75,11 +131,17 @@ print("X shape:", X.shape, "num cells:", len(records))
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-k_range = range(2, 11)   # usually start from k=2
+_k_min = int(os.environ.get("PIPELINE_K_MIN", "2"))
+_k_max = int(os.environ.get("PIPELINE_K_MAX", "10"))
+_n_init = int(os.environ.get("PIPELINE_KMEANS_N_INIT", "10"))
+_random_state = int(os.environ.get("PIPELINE_KMEANS_SEED", "42"))
+_pca_components = int(os.environ.get("PIPELINE_PCA_COMPONENTS", "2"))
+_num_best_k = int(os.environ.get("PIPELINE_NUM_BEST_K", "2"))
+k_range = range(_k_min, _k_max + 1)   # usually start from k=2
 sil_scores = {}
 
 for k in k_range:
-    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=k, random_state=_random_state, n_init=_n_init)
     labels = kmeans.fit_predict(X_scaled)
     score = silhouette_score(X_scaled, labels, metric="euclidean")
     sil_scores[k] = score
@@ -95,13 +157,13 @@ plt.tight_layout()
 plt.savefig("clustering/silhouette_vs_k.png")
 plt.show()
 
-# Get 2 best k values
+# Get best k values
 sorted_k = sorted(sil_scores.items(), key=lambda x: x[1], reverse=True)
-best_k_values = [sorted_k[0][0], sorted_k[1][0]]
-print(f"\nBest 2 k values: {best_k_values[0]} ({sil_scores[best_k_values[0]]:.4f}), {best_k_values[1]} ({sil_scores[best_k_values[1]]:.4f})\n")
+best_k_values = [sorted_k[i][0] for i in range(min(_num_best_k, len(sorted_k)))]
+print(f"\nBest {_num_best_k} k values: {', '.join(f'{k} ({sil_scores[k]:.4f})' for k in best_k_values)}\n")
 
 # === 7. PCA ===
-pca = PCA(n_components=2)
+pca = PCA(n_components=_pca_components)
 X_pca = pca.fit_transform(X_scaled)
 explained_var = pca.explained_variance_ratio_ * 100
 print(f"Explained variance: PC1 = {explained_var[0]:.2f}%, PC2 = {explained_var[1]:.2f}%")
@@ -115,7 +177,7 @@ for best_k in best_k_values:
     print(f"{'='*60}\n")
     
     # Clustering
-    kmeans_final = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+    kmeans_final = KMeans(n_clusters=best_k, random_state=_random_state, n_init=_n_init)
     final_labels = kmeans_final.fit_predict(X_scaled)
 
     print("Silhouette score per treatment:")
@@ -134,7 +196,7 @@ for best_k in best_k_values:
             print(f"{treatment}: not enough samples")
 
     # Build PCA dataframe
-    pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+    pca_df = pd.DataFrame(X_pca, columns=[f"PC{i+1}" for i in range(X_pca.shape[1])])
     pca_df["Experiment"] = [r["Experiment"] for r in records]
     pca_df["Parent"] = [r["Parent"] for r in records]
     pca_df["Treatment"] = [r["Treatment"] for r in records]

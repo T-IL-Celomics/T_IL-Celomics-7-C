@@ -1,6 +1,8 @@
 import json
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -9,15 +11,64 @@ from sklearn.metrics import silhouette_score
 import math
 import os
 
+# Ensure output directory exists before any writes
+os.makedirs("fitting", exist_ok=True)
+
 # === 0. Load dose information if available ===
+_dose_csv = os.environ.get("PIPELINE_DOSE_CSV", "cell_data/dose_dependency_summary_all_wells.csv")
+_control_channel = os.environ.get("PIPELINE_CONTROL_CHANNEL", "").strip()
+
+
+def _parse_channels(experiment_id: str) -> list:
+    """Extract the list of 4-char channel codes from an experiment ID.
+
+    Format: <name5><date6><4chars><well3><celltype4><ch1><ch2>...NOCO<rest>
+    Everything between position 22 and 'NOCO' is channel codes (4 chars each).
+    """
+    after = experiment_id[22:]
+    noco = after.find("NOCO")
+    if noco < 0:
+        return []
+    return [after[i:i + 4] for i in range(0, noco, 4)]
+
+
+def _control_cha_col(experiment_id: str, control_name: str) -> str:
+    """Return the Cha*_Category column name for the control channel,
+    or '' if not found.  E.g. control_name='NNIR' → 'Cha2_Category'
+    when NNIR is the 2nd channel in the experiment ID."""
+    if not control_name:
+        return ""
+    channels = _parse_channels(experiment_id)
+    for i, ch in enumerate(channels):
+        if ch == control_name:
+            return f"Cha{i + 1}_Category"
+    return ""
+
+
+def _make_dose_label(row, cols=None):
+    """Build pipe-delimited DoseLabel, excluding the control channel."""
+    if cols is None:
+        cols = [c for c in row.index if c.endswith("_Category")]
+    skip = _control_cha_col(str(row["Experiment"]), _control_channel)
+    parts = []
+    for c in cols:
+        if c == skip:
+            continue
+        if pd.notna(row[c]):
+            parts.append(f"{c.replace('_Category', '')}:{row[c]}")
+    return "|".join(parts)
+
+
 try:
-    dose_data = pd.read_csv("cell_data/dose_dependency_summary_all_wells.csv")
+    dose_data = pd.read_csv(_dose_csv)
     category_cols = sorted([c for c in dose_data.columns if c.endswith("_Category")])
     if category_cols:
         dose_data = dose_data[["Experiment", "Parent"] + category_cols].copy()
-        dose_data["DoseLabel"] = dose_data[category_cols].apply(
-            lambda row: "|".join([f"{c.replace('_Category', '')}:{row[c]}" for c in category_cols if pd.notna(row[c])]),
-            axis=1
+        if _control_channel:
+            print(f"Control channel to exclude from DoseLabel: {_control_channel}")
+
+        dose_data["DoseLabel"] = dose_data.apply(
+            lambda row: _make_dose_label(row, category_cols), axis=1
         )
         print(f"Loaded dose information with channels: {category_cols}\n")
     else:
@@ -28,13 +79,21 @@ except FileNotFoundError:
     print("Dose file not found, skipping dose analysis\n")
 
 # === 1. Load files ===
-with open("embeddings/summary_table_Embedding.json", "r") as f:
+with open(os.environ.get("PIPELINE_EMBEDDING_JSON", "embeddings/summary_table_Embedding.json"), "r") as f:
     embedding_data = json.load(f)
 
-with open("fitting/fitting_best_model_log_scaled.json", "r") as f:
+with open(os.environ.get("PIPELINE_FITTING_JSON", "fitting_best_model_log_scaled.json"), "r") as f:
     fitting_data = json.load(f)
 
-df_data = pd.read_csv("cell_data/MergedAndFilteredExperiment008.csv")
+_merged_csv = os.environ.get("PIPELINE_MERGED_CSV", "cell_data/MergedAndFilteredExperiment008.csv")
+if _merged_csv.lower().endswith((".xlsx", ".xls")):
+    df_data = pd.read_excel(_merged_csv)
+else:
+    try:
+        df_data = pd.read_csv(_merged_csv)
+    except UnicodeDecodeError:
+        print(f"[warn] UTF-8 decode failed for {_merged_csv}, retrying with latin-1")
+        df_data = pd.read_csv(_merged_csv, encoding="latin-1")
 
 # === 2. Build fitting dict ===
 fitting_dict = {}
@@ -42,9 +101,10 @@ for cell in fitting_data:
     key = (str(cell["Experiment"]), str(cell["Parent"]))
     fitting_dict[key] = cell
 
-# === 3. Define treatments ===
-#treatments = ["NNIRMETRGABYNOCO", "METRNNIRNOCO", "GABYNNIRNOCO","NNIRNOCO" ]
-treatments = ["CON0", "BRCACON1", "BRCACON2", "BRCACON3", "BRCACON4", "BRCACON5"]
+# === 3. Define treatments (from env or default) ===
+_treatments_env = os.environ.get("PIPELINE_TREATMENTS", "CON0, BRCACON1, BRCACON2, BRCACON3, BRCACON4, BRCACON5")
+treatments = [t.strip() for t in _treatments_env.split(",") if t.strip()]
+print(f"Treatments: {treatments}")
 # === 4. Get feature names
 all_features = [k for k in embedding_data[0].keys() if k not in ["Experiment", "Parent"]]
 
@@ -122,36 +182,43 @@ for cell in combined_data:
 X = np.array(X)
 
 # === 9. PCA ===
-pca = PCA(n_components=2)
+_pca_components = int(os.environ.get("PIPELINE_PCA_COMPONENTS", "2"))
+pca = PCA(n_components=_pca_components)
 X_pca = pca.fit_transform(X)
 explained = pca.explained_variance_ratio_ * 100
 print(f"Explained variance: PC1 = {explained[0]:.2f}%, PC2 = {explained[1]:.2f}%")
 
-# === 10. Find best 2 k values using silhouette score ===
+# === 10. Find best k values using silhouette score ===
+_k_min = int(os.environ.get("PIPELINE_K_MIN", "2"))
+_k_max = int(os.environ.get("PIPELINE_K_MAX", "10"))
+_n_init = int(os.environ.get("PIPELINE_KMEANS_N_INIT", "10"))
+_random_state = int(os.environ.get("PIPELINE_KMEANS_SEED", "42"))
+_num_best_k = int(os.environ.get("PIPELINE_NUM_BEST_K", "2"))
+_ci_z = float(os.environ.get("PIPELINE_CI_ZSCORE", "1.96"))
 silhouette_scores = {}
-k_range = range(2, 11)  # test k from 2 to 10
+k_range = range(_k_min, _k_max + 1)  # test k from 2 to k_max
 for k in k_range:
-    kmeans_temp = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans_temp = KMeans(n_clusters=k, random_state=_random_state, n_init=_n_init)
     clusters_temp = kmeans_temp.fit_predict(X)
     score = silhouette_score(X, clusters_temp)
     silhouette_scores[k] = score
     print(f"k={k}: silhouette_score={score:.4f}")
 
-# Get 2 best k values
+# Get best k values
 sorted_k = sorted(silhouette_scores.items(), key=lambda x: x[1], reverse=True)
-best_k_values = [sorted_k[0][0], sorted_k[1][0]]
-print(f"\nBest 2 k values: {best_k_values[0]} ({silhouette_scores[best_k_values[0]]:.4f}), {best_k_values[1]} ({silhouette_scores[best_k_values[1]]:.4f})\n")
+best_k_values = [sorted_k[i][0] for i in range(min(_num_best_k, len(sorted_k)))]
+print(f"\nBest {_num_best_k} k values: {', '.join(f'{k} ({silhouette_scores[k]:.4f})' for k in best_k_values)}\n")
 
 # === 11-15. Process both k values ===
 for best_k in best_k_values:
     print(f"Processing k={best_k}...")
     
     # KMeans clustering
-    kmeans = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=best_k, random_state=_random_state, n_init=_n_init)
     clusters = kmeans.fit_predict(X)
 
     # Create PCA + cluster DataFrame
-    pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+    pca_df = pd.DataFrame(X_pca, columns=[f"PC{i+1}" for i in range(X_pca.shape[1])])
     pca_df["Experiment"] = [r["Experiment"] for r in records]
     pca_df["Parent"] = [r["Parent"] for r in records]
     pca_df["Treatment"] = [r["Treatment"] for r in records]
@@ -214,8 +281,8 @@ for best_k in best_k_values:
         fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", bbox_to_anchor=(1.1, 1.0))
         plt.suptitle(f"PCA by Treatment (k={best_k})")
         plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_by_Treatment_k{best_k}.png")
-    plt.show()
+        plt.savefig(f"fitting/embedding_fitting_PCA_KMeans_by_Treatment_k{best_k}.png")
+        plt.show()
 
     # Plot by dose if available
     from scipy.stats import f_oneway
@@ -348,9 +415,9 @@ for best_k in best_k_values:
                     )
                     
                     treatment_contingency.to_csv(f"fitting/cluster_vs_dose_k{best_k}_{treatment}.csv")
-                print(f"{treatment} - Cluster vs Dose counts:")
-                print(treatment_contingency)
-                print()
+                    print(f"{treatment} - Cluster vs Dose counts:")
+                    print(treatment_contingency)
+                    print()
 
     # Merge with original experiment data
     df_data_copy = df_data.copy()
@@ -364,22 +431,19 @@ for best_k in best_k_values:
     print(f"Saved: embedding_fitting_Merged_Clusters_PCA_k{best_k}.csv\n")
 
 # === Generate descriptive tables by cluster ===
-import os
-os.makedirs("fitting", exist_ok=True)
 
 print("\n" + "="*60)
 print("Generating descriptive tables by cluster")
 print("="*60 + "\n")
 
-# Load dose information if available
+# Load dose information if available (re-use control-channel-aware builder)
 try:
-    dose_data = pd.read_csv("cell_data/dose_dependency_summary_all_wells.csv")
+    dose_data = pd.read_csv(_dose_csv)
     category_cols = sorted([c for c in dose_data.columns if c.endswith("_Category")])
     if category_cols:
         dose_data = dose_data[["Experiment", "Parent"] + category_cols].copy()
-        dose_data["DoseLabel"] = dose_data[category_cols].apply(
-            lambda row: "|".join([f"{c.replace('_Category', '')}:{row[c]}" for c in category_cols if pd.notna(row[c])]),
-            axis=1
+        dose_data["DoseLabel"] = dose_data.apply(
+            lambda row: _make_dose_label(row, category_cols), axis=1
         )
         print(f"Loaded dose information\n")
     else:
@@ -424,8 +488,8 @@ for best_k in best_k_values:
             mean = data[feature].mean()
             std = data[feature].std()
             se = std / (len(data) ** 0.5)
-            ci_lower = mean - 1.96 * se
-            ci_upper = mean + 1.96 * se
+            ci_lower = mean - _ci_z * se
+            ci_upper = mean + _ci_z * se
             stats[f'{feature}_Mean'] = mean
             stats[f'{feature}_Std'] = std
             stats[f'{feature}_SE'] = se
@@ -468,8 +532,8 @@ for best_k in best_k_values:
                         mean = data[feature].mean()
                         std = data[feature].std()
                         se = std / (len(data) ** 0.5)
-                        ci_lower = mean - 1.96 * se
-                        ci_upper = mean + 1.96 * se
+                        ci_lower = mean - _ci_z * se
+                        ci_upper = mean + _ci_z * se
                         stats[f'{feature}_Mean'] = mean
                         stats[f'{feature}_Std'] = std
                         stats[f'{feature}_SE'] = se

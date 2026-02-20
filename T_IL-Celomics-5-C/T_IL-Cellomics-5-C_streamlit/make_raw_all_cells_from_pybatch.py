@@ -1,13 +1,14 @@
 import pandas as pd
 import numpy as np
+import os
 
 # ---------- CONFIG ----------
-out_dir = "/content/drive/MyDrive/final_project/T_IL-Cellomics-5-C/cell_data"
-INPUT_EXCEL = f"{out_dir}/summary_table.xlsx"   # pybatch xlsx
-OUTPUT_CSV  = f"{out_dir}/raw_all_cells.csv"    # file used by the pipeline
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+INPUT_EXCEL = os.environ.get("PIPELINE_INPUT_EXCEL", os.path.join(SCRIPT_DIR, "summary_table.xlsx"))
+OUTPUT_CSV  = os.environ.get("PIPELINE_OUTPUT_CSV",  os.path.join(SCRIPT_DIR, "raw_all_cells.csv"))
 
-MIN_FRAMES_PER_CELL = 25
-MAX_GAP             = 5   # max allowed gap in TimeIndex
+MIN_FRAMES_PER_CELL = int(os.environ.get("PIPELINE_MIN_FRAMES", "25"))
+MAX_GAP             = int(os.environ.get("PIPELINE_MAX_GAP", "5"))   # max allowed gap in TimeIndex
 # ----------------------------
 
 print("loading pybatch table ...")

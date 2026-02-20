@@ -1,0 +1,92 @@
+# ==================================================================================
+#  SETUP INSTRUCTIONS FOR NEW MACHINE
+# ==================================================================================
+# This file installs Python dependencies via:
+#     pip install -r requirements.txt
+#
+# BUT you also need Java installed for PySpark to work correctly!
+#
+# To install Java 17 on Ubuntu/Debian systems, run the following in terminal:
+#
+#     sudo apt update
+#     sudo apt install -y openjdk-17-jdk
+#
+# To check it installed correctly:
+#
+#     java -version
+#     # Should return something like: "openjdk version 17..."
+#
+# Optional: Set JAVA_HOME manually (if needed):
+#
+#     export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+#     export PATH=$JAVA_HOME/bin:$PATH
+#
+# ==================================================================================
+#  TEMP FILES NOTE:
+# ==================================================================================
+# Some Python and Java libraries (e.g. torch, dill, spark) require access to
+# a writable temporary directory, typically /tmp.
+#
+# If you get errors like "no usable temporary directory" or
+# "Insufficient space for shared memory file", set a custom tmp folder:
+#
+#     mkdir -p ~/tmp
+#     export TMPDIR=~/tmp
+#     export _JAVA_OPTIONS="-Djava.io.tmpdir=$TMPDIR"
+#
+# After you're done running the pipeline and you have your results,
+# you can safely clean it up with:
+#
+#     rm -rf ~/tmp/*
+#
+# Do NOT delete the folder itself, only its contents.
+#
+# ==================================================================================
+
+# Core scientific libraries
+numpy==1.26.4
+scipy>=1.11.3,<1.12.0
+pandas>=2.0.0,<3.0.0
+matplotlib==3.10.0
+
+# Machine Learning
+scikit-learn==1.4.2
+skrebate==0.62
+
+# Visualization & utilities
+seaborn==0.13.2
+tqdm==4.67.1
+
+# Signal processing
+nolds==0.6.1
+PyWavelets==1.8.0
+EMD-signal==1.6.4
+
+# Deep learning & config
+torch>=2.1,<2.5
+omegaconf>=2.3.0
+torchvision>=0.16,<0.19
+
+# Spark & MLflow
+pyspark>=3.5.0
+mlflow>=2.11.1
+pyarrow==13.0.0
+
+# Excel I/O
+openpyxl>=3.1.0
+
+# Forecasting frameworks
+timesfm==1.2.7
+sktime>=0.21.1
+
+# Foundation Models
+chronos-forecasting==1.4.1
+uni2ts==1.2.0
+
+# Statistical models
+statsmodels==0.14.1
+utilsforecast>=0.1.10,<0.2
+
+# UMAP and HuggingFace (used for embedding)
+umap-learn==0.5.5
+huggingface_hub==0.23.2

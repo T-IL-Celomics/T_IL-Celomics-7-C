@@ -35,13 +35,12 @@ print(f"[Main] using device: {device}")
 
 
 # ========== 4) Load sample data ==========
-sample_file = os.environ.get("PIPELINE_RAW_CSV", "cell_data/raw_all_cells.csv")
+sample_file = "cell_data/raw_all_cells.csv"
 if not os.path.exists(sample_file):
     raise FileNotFoundError(f"Sample file '{sample_file}' not found.")
 
 # ========== 5) Load selected features ==========
-_features_file = os.environ.get("PIPELINE_FEATURES_FILE", "cell_data/selected_features.txt")
-with open(_features_file, "r") as f:
+with open("cell_data/selected_features.txt", "r") as f:
     features_list = [line.strip() for line in f if line.strip()]
 
 #  4-gpu sharding by feature 
@@ -53,15 +52,15 @@ print(f"[Shard] {shard_idx}/{num_shards}: {len(features_list)} features")
 
 # ========== 6) Preprocess input data ==========
 df_raw = pd.read_csv(sample_file)
-df_raw['ds'] = pd.to_datetime(df_raw['ds'], errors='coerce')
+df_raw['ds'] = pd.to_datetime(df_raw['ds'], infer_datetime_format=True, errors='coerce')
 if df_raw['ds'].isna().any():
     missing = df_raw['ds'].isna().sum()
     print(f"Warning: {missing} rows of 'ds' could not be parsed and will be dropped.")
     df_raw = df_raw.dropna(subset=['ds'])
 # Subsample 500 unique cells
-MAX_CELLS = int(os.environ.get("PIPELINE_MAX_CELLS", os.environ.get("MAX_CELLS", "500")))  # set 0 for all
+MAX_CELLS = int(os.environ.get("MAX_CELLS", "500"))  # set -1 for all
 unique_ids = df_raw["unique_id"].dropna().unique()
-if MAX_CELLS > 0 and len(unique_ids) > MAX_CELLS:
+if MAX_CELLS != -1 and len(unique_ids) > MAX_CELLS:
     np.random.seed(42)
     selected_ids = np.random.choice(unique_ids, size=MAX_CELLS, replace=False)
     df_raw = df_raw[df_raw["unique_id"].isin(selected_ids)]
@@ -96,7 +95,6 @@ for feature in features_list:
     print(f"[time] feature={feature} evaluate_models: {time.time() - t0:.2f}s")
     rmse_list = []
     chronos_list = []
-    chronos_t5_list = []
 
     for mf in glob.glob(os.path.join(feature_dir, "*_metrics.csv")):
         model_name = os.path.basename(mf).replace("_metrics.csv", "")
@@ -105,10 +103,8 @@ for feature in features_list:
         if not dfm.empty:
             avg_rmse = dfm["score"].mean()
             rmse_list.append((model_name, avg_rmse))
-            if "chronos" in model_name.lower():
-                chronos_list.append((model_name, avg_rmse))
             if "chronost5" in model_name.lower():
-                chronos_t5_list.append((model_name, avg_rmse))
+                chronos_list.append((model_name, avg_rmse))
 
     if not rmse_list:
         print(f"No valid runs for feature {feature}; skipping.")
@@ -130,29 +126,13 @@ for feature in features_list:
         top_models[f"{feature}_best_chronos_rmse"] = best_chronos_rmse
         print(f" → Best **Chronos** model for {feature}: {best_chronos_model} (RMSE={best_chronos_rmse:.4f})")
 
-    # Best Chronos T5 model (for embeddings — only T5 supports .embed())
-    if "chronost5" in best_model.lower():
-        top_models[f"{feature}_best_t5"] = best_model
-        top_models[f"{feature}_best_t5_rmse"] = best_rmse
-    elif chronos_t5_list:
-        best_t5_model, best_t5_rmse = min(chronos_t5_list, key=lambda x: x[1])
-        top_models[f"{feature}_best_t5"] = best_t5_model
-        top_models[f"{feature}_best_t5_rmse"] = best_t5_rmse
-        print(f" → Best **T5** model for {feature}: {best_t5_model} (RMSE={best_t5_rmse:.4f})")
-
 # ========== 9) Save final summary ==========
 print("\n=== Best model per feature ===")
 print(top_models)
 
 results = {}
 for k, v in top_models.items():
-    if "_best_t5_rmse" in k:
-        feat = k.replace("_best_t5_rmse", "")
-        results.setdefault(feat, {})["best_t5_rmse"] = v
-    elif "_best_t5" in k:
-        feat = k.replace("_best_t5", "")
-        results.setdefault(feat, {})["best_t5_model"] = v
-    elif "_best_chronos_rmse" in k:
+    if "_best_chronos_rmse" in k:
         feat = k.replace("_best_chronos_rmse", "")
         results.setdefault(feat, {})["best_chronos_rmse"] = v
     elif "_best_chronos" in k:
@@ -200,16 +180,6 @@ with open("best_model_per_feature.json", "w") as f:
 
 with open("best_chronos_model_per_feature.json", "w") as f:
     json.dump(chronos_model_dict, f, indent=4)
-
-# Best T5 model per feature (for embeddings — only T5 supports .embed())
-t5_model_dict = {
-    feat: d.get("best_t5_model")
-    for feat, d in results.items()
-    if "best_t5_model" in d
-}
-
-with open("best_t5_model_per_feature.json", "w") as f:
-    json.dump(t5_model_dict, f, indent=4)
 
 print("Saved best model mappings to JSON files.")
 print(f"[time] total runtime: {time.time() - t_total0:.2f}s")

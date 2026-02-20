@@ -143,9 +143,21 @@ def run_embedding_pipeline(df, model_dict_path, output_path, dim=3):
     print(f"Total runtime: {duration / 60:.2f} minutes")
 
 # Example usage:
-df = pd.read_csv("MergedAndFilteredExperiment008.csv")
+import os as _os
+_csv_path = _os.environ.get("PIPELINE_MERGED_CSV", "MergedAndFilteredExperiment008.csv")
+_model_dict = _os.environ.get("PIPELINE_CHRONOS_MODEL_DICT", "best_t5_model_per_feature.json")
+_output = _os.environ.get("PIPELINE_EMBEDDING_JSON", "Embedding008.json")
+if _csv_path.lower().endswith((".xlsx", ".xls")):
+    df = pd.read_excel(_csv_path)
+else:
+    try:
+        df = pd.read_csv(_csv_path)
+    except UnicodeDecodeError:
+        print(f"[warn] UTF-8 decode failed for {_csv_path}, retrying with latin-1")
+        df = pd.read_csv(_csv_path, encoding="latin-1")
 run_embedding_pipeline(
     df=df,
-    model_dict_path="best_chronos_model_per_feature.json",
-    output_path="Embedding008.json")
+    model_dict_path=_model_dict,
+    output_path=_output,
+    dim=int(_os.environ.get("PIPELINE_UMAP_DIM", "3")))
 
