@@ -1774,3 +1774,138 @@ def dose_pca_scatter(pca_df, k_cluster=3, figsize=(8, 6)):
         fig.tight_layout()
         st.pyplot(fig)
         plt.close(fig)
+
+
+def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label=""):
+    """
+    Run independent PCA + K-means clustering on a per-well-letter subset.
+
+    Steps:
+      1. Extract numeric feature columns from *dsn_sub*.
+      2. Z-score normalise (StandardScaler).
+      3. PCA (all components).
+      4. Elbow plot for reference.
+      5. K-means on significant PCA components (explained-variance ratio ≥ 0.1,
+         minimum 2).
+      6. Scatter plot of PC1 vs PC2 coloured by cluster.
+
+    Parameters
+    ----------
+    dsn_sub : pd.DataFrame
+        Subset of dataSpecGraphN for one well letter.  Must contain the
+        columns listed in *feature_cols*.
+    feature_cols : list[str]
+        Column names to use as features (e.g. Features[:-1]).
+    k_cluster : int
+        Number of clusters for K-means.
+    well_label : str
+        Label used in plot titles (e.g. the well letter).
+
+    Returns
+    -------
+    groups : np.ndarray
+        Cluster assignment for every row of *dsn_sub* (sorted so that
+        cluster 0 has the smallest centre-sum, matching the main TASC
+        convention).
+    pc1 : np.ndarray
+        First principal-component scores.
+    pc2 : np.ndarray
+        Second principal-component scores.
+    """
+    with st.spinner(f"Running per-well PCA + K-means for row {well_label}..."):
+        # --- 1. Extract numeric features ----------------------------------
+        available_cols = [c for c in feature_cols if c in dsn_sub.columns]
+        data = dsn_sub[available_cols].apply(pd.to_numeric, errors="coerce")
+        data = data.fillna(0.0)
+
+        if data.shape[0] < k_cluster:
+            st.warning(
+                f"Too few rows ({data.shape[0]}) for {k_cluster} clusters "
+                f"in well row {well_label} — skipping clustering."
+            )
+            return None, None, None
+
+        # --- 2. Z-score normalisation -------------------------------------
+        scaler = StandardScaler(with_std=True)
+        data_scaled = pd.DataFrame(
+            scaler.fit_transform(data),
+            columns=data.columns,
+            index=data.index,
+        )
+
+        # --- 3. PCA -------------------------------------------------------
+        pca = decomposition.PCA(random_state=42)
+        pca.fit(data_scaled)
+        pca_transformed = pca.transform(data_scaled)
+
+        n_sig = max(2, int(np.sum(pca.explained_variance_ratio_ >= 0.1)))
+        pca_exp_var = pca.explained_variance_ratio_ * 100
+
+        # --- 4. Elbow plot ------------------------------------------------
+        pca_sig = pca_transformed[:, :n_sig]
+        n_clusters_range = range(2, min(16, data.shape[0]))
+        distortions = []
+        for n_k in n_clusters_range:
+            km_tmp = KMeans(n_clusters=n_k, random_state=0).fit(pca_sig)
+            distortions.append(
+                np.sum(np.min(
+                    cdist(pca_sig, km_tmp.cluster_centers_, "euclidean"),
+                    axis=1,
+                )) / pca_sig.shape[0]
+            )
+        fig_elbow, ax_elbow = plt.subplots(figsize=(6.5, 6.5), dpi=200)
+        ax_elbow.plot(list(n_clusters_range), distortions, "bx-")
+        ax_elbow.set_xlabel("K Clusters", fontsize=15)
+        ax_elbow.set_ylabel("Distortion", fontsize=15)
+        ax_elbow.set_title(
+            f"Elbow Method — Well Row {well_label}",
+            fontweight="bold", fontsize=18,
+        )
+        st.pyplot(fig_elbow)
+        plt.close(fig_elbow)
+
+        # --- 5. K-means ---------------------------------------------------
+        km_model = KMeans(n_clusters=k_cluster, random_state=0).fit(pca_sig)
+        # Sort clusters so that group 0 = smallest centre sum (same as main TASC)
+        idx = np.argsort(km_model.cluster_centers_.sum(axis=1))
+        lut = np.zeros_like(idx)
+        lut[idx] = np.arange(k_cluster)
+        groups = lut[km_model.predict(pca_sig)]
+
+        # --- 6. Scatter plot ----------------------------------------------
+        PC_cols = [f"PC{i+1}" for i in range(n_sig)]
+        km_df = pd.DataFrame(pca_sig, columns=PC_cols, index=data.index)
+        km_df["Groups"] = groups
+        n_groups = len(np.unique(groups))
+        palette = sns.color_palette("hls", n_groups)
+
+        fig_km, ax_km = plt.subplots(figsize=(6.5, 6.5), dpi=200, facecolor="w")
+        sns.scatterplot(
+            x="PC1", y="PC2", hue="Groups", data=km_df,
+            ax=ax_km, legend="full", palette=palette,
+        )
+        ax_km.set_title(
+            f"K-means k={k_cluster} — Well Row {well_label}",
+            fontweight="bold", fontsize=18,
+        )
+        ax_km.set_xlabel(f"PC1 ({pca_exp_var[0]:.2f}%)", fontsize=15)
+        ax_km.set_ylabel(f"PC2 ({pca_exp_var[1]:.2f}%)", fontsize=15)
+        legend_texts = ax_km.get_legend().texts if ax_km.get_legend() else []
+        ncol = 1
+        if len(legend_texts) > 25:
+            ncol = 3
+        elif len(legend_texts) > 17:
+            ncol = 2
+        ax_km.legend(
+            bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0,
+            ncol=ncol, framealpha=1, edgecolor="black",
+        )
+        # Plot cluster centres
+        centres = km_model.cluster_centers_
+        ax_km.scatter(centres[:, 0], centres[:, 1], c="black", s=25)
+        for spine in ax_km.spines.values():
+            spine.set_visible(True)
+        st.pyplot(fig_km)
+        plt.close(fig_km)
+
+    return groups, pca_transformed[:, 0], pca_transformed[:, 1]

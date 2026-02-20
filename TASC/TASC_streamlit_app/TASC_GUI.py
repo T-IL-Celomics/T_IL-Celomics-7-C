@@ -627,7 +627,31 @@ def run_analysis(
               # Build DoseCombo for this well row
               build_dose_combo_column(dsn_sub, wl_dose_cols)
               pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
-              pca_sub["Groups"] = dsn_sub["Groups"].values
+
+              # ── Per-well PCA + K-means clustering ──────────────────────
+              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+              f.write(markdown.markdown(
+                  f"Figure {FigureNumber} — Well Row {wl}: Elbow + K-means"
+              ))
+              st.markdown(
+                  f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Well\\ K\\text{{-}}Means\\ "
+                  f"Clustering\\ (row\\ {wl})}}$$"
+              )
+              FigureNumber += 1
+
+              well_groups, well_pc1, well_pc2 = dose_kmeans_pca(
+                  dsn_sub, Features[:-1], k_cluster=k_cluster, well_label=wl
+              )
+
+              if well_groups is not None:
+                  # Replace global Groups with per-well clusters
+                  dsn_sub["Groups"] = well_groups
+                  pca_sub["Groups"] = well_groups
+                  # Update PCA coordinates with per-well values
+                  pca_sub["PC1"] = well_pc1
+                  pca_sub["PC2"] = well_pc2
+              else:
+                  pca_sub["Groups"] = dsn_sub["Groups"].values
 
               # 1) Cluster distribution bar chart
               st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
