@@ -1776,7 +1776,8 @@ def dose_pca_scatter(pca_df, k_cluster=3, figsize=(8, 6)):
         plt.close(fig)
 
 
-def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label=""):
+def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label="",
+                    dose_combo_labels=None):
     """
     Run independent PCA + K-means clustering on a per-well-letter subset.
 
@@ -1788,6 +1789,7 @@ def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label=""):
       5. K-means on significant PCA components (explained-variance ratio ≥ 0.1,
          minimum 2).
       6. Scatter plot of PC1 vs PC2 coloured by cluster.
+      7. Scatter plot of PC1 vs PC2 coloured by DoseCombo (if provided).
 
     Parameters
     ----------
@@ -1800,6 +1802,9 @@ def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label=""):
         Number of clusters for K-means.
     well_label : str
         Label used in plot titles (e.g. the well letter).
+    dose_combo_labels : array-like or None
+        DoseCombo label for every row of *dsn_sub*.  When provided an
+        additional PCA scatter coloured by DoseCombo is plotted.
 
     Returns
     -------
@@ -1907,5 +1912,41 @@ def dose_kmeans_pca(dsn_sub, feature_cols, k_cluster=3, well_label=""):
             spine.set_visible(True)
         st.pyplot(fig_km)
         plt.close(fig_km)
+
+        # --- 7. Scatter coloured by DoseCombo -----------------------------
+        if dose_combo_labels is not None:
+            combo_arr = np.asarray(dose_combo_labels)
+            if len(combo_arr) == len(km_df):
+                km_df["DoseCombo"] = combo_arr
+                combos = sorted(km_df["DoseCombo"].unique())
+                pal_combo = sns.color_palette("hls", len(combos))
+
+                fig_dc, ax_dc = plt.subplots(
+                    figsize=(6.5, 6.5), dpi=200, facecolor="w",
+                )
+                sns.scatterplot(
+                    x="PC1", y="PC2", hue="DoseCombo", data=km_df,
+                    ax=ax_dc, legend="full", palette=pal_combo, alpha=0.6,
+                )
+                ax_dc.set_title(
+                    f"K-means PCA by Dose Combo — Well Row {well_label}",
+                    fontweight="bold", fontsize=16,
+                )
+                ax_dc.set_xlabel(f"PC1 ({pca_exp_var[0]:.2f}%)", fontsize=15)
+                ax_dc.set_ylabel(f"PC2 ({pca_exp_var[1]:.2f}%)", fontsize=15)
+                leg_texts = ax_dc.get_legend().texts if ax_dc.get_legend() else []
+                ncol_dc = 1
+                if len(leg_texts) > 25:
+                    ncol_dc = 3
+                elif len(leg_texts) > 17:
+                    ncol_dc = 2
+                ax_dc.legend(
+                    bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.0,
+                    ncol=ncol_dc, framealpha=1, edgecolor="black", fontsize=8,
+                )
+                for spine in ax_dc.spines.values():
+                    spine.set_visible(True)
+                st.pyplot(fig_dc)
+                plt.close(fig_dc)
 
     return groups, pca_transformed[:, 0], pca_transformed[:, 1]

@@ -640,7 +640,9 @@ def run_analysis(
               FigureNumber += 1
 
               well_groups, well_pc1, well_pc2 = dose_kmeans_pca(
-                  dsn_sub, Features[:-1], k_cluster=k_cluster, well_label=wl
+                  dsn_sub, Features[:-1], k_cluster=k_cluster,
+                  well_label=wl,
+                  dose_combo_labels=dsn_sub["DoseCombo"].values,
               )
 
               if well_groups is not None:
