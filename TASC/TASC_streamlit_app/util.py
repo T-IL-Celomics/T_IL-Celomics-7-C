@@ -1416,3 +1416,361 @@ def TASC(dataDrop, dataLabel, labelsCol='Experiment', LE=True,
         AE_df = []
 
         return pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df, pca
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  Per-Dose Visualization Helpers
+# ════════════════════════════════════════════════════════════════════════
+
+import re as _re   # used by merge helpers below
+
+DOSE_CATEGORY_COLS = ["Cha1_Category", "Cha2_Category", "Cha3_Category"]
+
+
+def merge_dose_csv_into_df(df, dose_csv_path):
+    """
+    Load a dose CSV (Experiment, Parent, Cha*_Category, ...) and left-merge
+    its category columns into *df* (matched on Experiment + Parent).
+
+    Matching strategy:
+      1. Normalise both sides (strip NNN0, whitespace, .xls extension).
+      2. Try exact Experiment match first.
+      3. If no overlap, try substring matching — e.g. the dose CSV may have
+         short names like ``F2`` that appear inside full well names such as
+         ``AM001100425CHR2F02293TNNIRNOCOWH00``.
+
+    Returns True if at least one Cha*_Category column was successfully added.
+    """
+    try:
+        dose = pd.read_csv(dose_csv_path)
+    except Exception as e:
+        st.warning(f"Could not read dose CSV: {e}")
+        return False
+
+    if "Experiment" not in dose.columns or "Parent" not in dose.columns:
+        st.warning("Dose CSV must contain 'Experiment' and 'Parent' columns.")
+        return False
+
+    # --- Normalise experiment names on BOTH sides ---
+    def _norm_exp(s):
+        return (s.astype(str)
+                .str.replace("NNN0", "", regex=False)
+                .str.replace(".xls", "", regex=False)
+                .str.replace(".xlsx", "", regex=False)
+                .str.strip())
+
+    dose["Experiment"] = _norm_exp(dose["Experiment"])
+
+    # Normalise df experiments for matching, but keep the originals so the
+    # caller's dataframe is not permanently altered (prevents mangled names
+    # in downstream pickle saves, groupby operations, etc.).
+    _orig_df_experiment = df["Experiment"].copy()
+    df["Experiment"] = _norm_exp(df["Experiment"])
+
+    cat_cols = [c for c in DOSE_CATEGORY_COLS if c in dose.columns]
+    if not cat_cols:
+        st.warning("Dose CSV contains no Cha*_Category columns.")
+        return False
+
+    # Keep only the columns we need
+    dose_slim = dose[["Experiment", "Parent"] + cat_cols].copy()
+
+    # Aggregate per (Experiment, Parent): majority-vote for each category
+    from collections import Counter
+    def _majority(series):
+        s = series.dropna()
+        if len(s) == 0:
+            return None
+        return Counter(s).most_common(1)[0][0]
+
+    dose_agg = (
+        dose_slim
+        .groupby(["Experiment", "Parent"])
+        .agg({c: _majority for c in cat_cols})
+        .reset_index()
+    )
+
+    # Extract WellLetter from the SHORT dose experiment names BEFORE remapping.
+    # Dose names are plate positions like "B2", "D4"; the letter prefix is the row.
+    def _get_well_letter(short):
+        m = _re.match(r'^([A-Za-z]+)', str(short).strip())
+        return m.group(1).upper() if m else "?"
+    dose_agg["WellLetter"] = dose_agg["Experiment"].apply(_get_well_letter)
+
+    # --- Check overlap & build experiment mapping ---
+    df_exps = set(df["Experiment"].unique())
+    dose_exps = set(dose_agg["Experiment"].unique())
+    overlap = df_exps & dose_exps
+
+    with st.expander("Dose merge — debug info", expanded=False):
+        st.write(f"**data Experiments (sample):** {list(df_exps)[:5]}")
+        st.write(f"**dose Experiments (sample):** {list(dose_exps)[:5]}")
+        st.write(f"**exact overlapping Experiments:** {len(overlap)}")
+
+    # If no exact overlap, try plate-position matching.
+    # Dose short names are plate positions like "B2", "D4".
+    # Full experiment names encode the well as zero-padded form, e.g. "B02", "D04".
+    # We convert "B2" → "B02" (pad the numeric part) and search inside the full name.
+    if len(overlap) == 0 and len(dose_exps) > 0 and len(df_exps) > 0:
+        st.info("No exact Experiment match. Trying well-position matching (e.g. B2 → B02)…")
+
+        def _to_padded(short):
+            """Convert 'B2' → 'B02', 'D12' → 'D12' (already 2-digit)."""
+            m = _re.match(r'^([A-Za-z]+)(\d+)$', str(short).strip())
+            if m:
+                return m.group(1).upper() + m.group(2).zfill(2)
+            return str(short).strip()
+
+        dose_to_full = {}
+        for d_exp in dose_exps:
+            padded = _to_padded(d_exp)
+            for f_exp in df_exps:
+                if padded in f_exp:
+                    dose_to_full[d_exp] = f_exp
+                    break
+
+        if dose_to_full:
+            with st.expander("Dose merge — well-position matches", expanded=False):
+                st.write(f"**matches found:** {len(dose_to_full)}")
+                st.write(f"**mapping sample:** { {k: v for k, v in list(dose_to_full.items())[:5]} }")
+            dose_agg["Experiment"] = dose_agg["Experiment"].map(dose_to_full)
+            dose_agg.dropna(subset=["Experiment"], inplace=True)
+            overlap = df_exps & set(dose_agg["Experiment"].unique())
+        else:
+            # Final fallback: plain substring match
+            for d_exp in dose_exps:
+                for f_exp in df_exps:
+                    if d_exp in f_exp or f_exp in d_exp:
+                        dose_to_full[d_exp] = f_exp
+                        break
+            if dose_to_full:
+                dose_agg["Experiment"] = dose_agg["Experiment"].map(dose_to_full)
+                dose_agg.dropna(subset=["Experiment"], inplace=True)
+                overlap = df_exps & set(dose_agg["Experiment"].unique())
+            else:
+                st.warning("Could not match any Experiment names between data and dose CSV.")
+
+    if len(overlap) == 0:
+        st.warning("No overlapping Experiment names between data and dose CSV.")
+        return False
+
+    # Debug Parent overlap for first matching experiment
+    ex0 = list(overlap)[0]
+    df_parents = sorted(df.loc[df['Experiment'] == ex0, 'Parent'].unique()[:5])
+    dose_parents = sorted(dose_agg.loc[dose_agg['Experiment'] == ex0, 'Parent'].unique()[:5])
+    with st.expander("Dose merge — Parent debug", expanded=False):
+        st.write(f"**data Parents ('{ex0}'):** {df_parents}  dtype={df['Parent'].dtype}")
+        st.write(f"**dose Parents ('{ex0}'):** {dose_parents}  dtype={dose_agg['Parent'].dtype}")
+
+    # Ensure Parent types match
+    try:
+        dose_agg["Parent"] = dose_agg["Parent"].astype(df["Parent"].dtype)
+    except (ValueError, TypeError):
+        df["Parent"] = df["Parent"].astype(str)
+        dose_agg["Parent"] = dose_agg["Parent"].astype(str)
+
+    # Drop any pre-existing category columns to avoid _x/_y duplicates
+    drop_cols = [c for c in cat_cols + ["WellLetter"] if c in df.columns]
+    df.drop(columns=drop_cols, inplace=True)
+
+    merge_cols = ["Experiment", "Parent"] + cat_cols + ["WellLetter"]
+    merged = df.merge(dose_agg[merge_cols], on=["Experiment", "Parent"], how="left")
+
+    # Write the new columns back into the original df (in place)
+    for c in cat_cols + ["WellLetter"]:
+        df[c] = merged[c].values
+
+    # Restore the original (un-normalised) Experiment names so the caller's
+    # dataframe is not permanently mangled.
+    df["Experiment"] = _orig_df_experiment
+
+    n_matched = df[cat_cols[0]].notna().sum()
+    st.success(f"✅ Merged dose data for **{n_matched}** / {len(df)} rows "
+               f"({len(cat_cols)} category columns: {', '.join(cat_cols)}).")
+    return n_matched > 0
+
+
+def mask_control_channel(df, control_channel):
+    """
+    For each Cha*_Category column, determine whether its channel position
+    matches *control_channel* by inspecting the Experiment name, then set
+    that column to 'NA'.
+
+    Channel positions in the experiment name:
+      positions 22-25 → Cha1, 26-29 → Cha2, 30-33 → Cha3.
+
+    If the experiment names have already been NNN0-cleaned, positions shift.
+    As a fallback, we just check whether *control_channel* appears in the name
+    at any channel slot and mask the corresponding column.
+    """
+    cat_cols = detect_dose_columns(df)
+    if not cat_cols:
+        return
+
+    # Try to figure out *which* Cha column maps to the control channel.
+    # Use the first Experiment name as a representative.
+    sample_exp = str(df["Experiment"].iloc[0])
+
+    # After NNN0 removal the channel block starts at position 22 or later.
+    # We search for the 4-letter control_channel string
+    # at each 4-char slot starting from position 18 (conservative).
+    masked_col = None
+    for ch_idx in range(3):
+        col_name = f"Cha{ch_idx + 1}_Category"
+        if col_name not in cat_cols:
+            continue
+        # Check the channel slot in the experiment name
+        start = 22 + ch_idx * 4
+        if start + 4 <= len(sample_exp):
+            if sample_exp[start:start + 4].upper() == control_channel.upper():
+                masked_col = col_name
+                break
+
+    # Fallback: search anywhere in the experiment string
+    if masked_col is None:
+        for ch_idx in range(3):
+            col_name = f"Cha{ch_idx + 1}_Category"
+            if col_name in cat_cols and control_channel.upper() in sample_exp.upper():
+                masked_col = col_name
+                break
+
+    if masked_col:
+        df[masked_col] = "NA"
+        st.write(f"Masked `{masked_col}` → NA  (control channel **{control_channel}**)")
+    else:
+        st.warning(f"Could not determine which channel column corresponds to "
+                   f"'{control_channel}'. No masking applied.")
+
+
+def detect_dose_columns(df):
+    """Return the list of Cha*_Category columns that exist in *df*."""
+    return [c for c in DOSE_CATEGORY_COLS if c in df.columns]
+
+
+def build_dose_combo_column(df, dose_cols):
+    """
+    Create a 'DoseCombo' column by joining the per-channel category values.
+    Missing / NaN values are filled with 'NA'.
+    Returns the modified DataFrame (in place).
+    """
+    tmp = df[dose_cols].fillna("NA").astype(str)
+    df["DoseCombo"] = tmp.apply(lambda row: "_".join(row), axis=1)
+    return df
+
+
+def histByKmeansDoseCombo(pca_df, k_cluster=3, bar_width=0.25,
+                          figsize=(15, 5), rotate=45):
+    """
+    Grouped bar chart: cluster proportion per DoseCombo (each combo sums to 100 %).
+    """
+    with st.spinner("Generating cluster distribution per Dose Combo..."):
+        fig, ax = plt.subplots(figsize=figsize, dpi=200)
+        ax.set_title("Cluster Distribution per Dose Combo", fontsize=15)
+
+        combos = sorted(pca_df["DoseCombo"].unique())
+        n_combos = len(combos)
+        combo_to_idx = {c: i for i, c in enumerate(combos)}
+        color = sns.color_palette("hls", k_cluster)
+
+        for g in range(k_cluster):
+            heights = []
+            for combo in combos:
+                subset = pca_df[pca_df["DoseCombo"] == combo]
+                total = len(subset)
+                count = (subset["Groups"] == g).sum()
+                heights.append(count / total if total else 0)
+            x_pos = [combo_to_idx[c] + g * bar_width for c in combos]
+            ax.bar(x_pos, heights, bar_width, label=f"Group {g}", color=color[g])
+
+        tick_pos = [combo_to_idx[c] + (k_cluster - 1) * bar_width / 2 for c in combos]
+        ax.set_xticks(tick_pos)
+        ax.set_xticklabels(combos, rotation=rotate, ha="right", fontsize=10)
+        ax.set_xlabel("Dose Combo", fontsize=13)
+        ax.set_ylabel("Proportion", fontsize=13)
+        ax.legend(bbox_to_anchor=(1.15, 1), framealpha=1, edgecolor="black")
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+
+def dose_cluster_heatmap(pca_df, k_cluster=3, figsize=(10, 6)):
+    """
+    Heatmap of cluster-proportion rows vs DoseCombo columns.
+    Each column (combo) sums to 1.
+    """
+    with st.spinner("Generating Dose Combo × Cluster heatmap..."):
+        ct = pd.crosstab(pca_df["Groups"], pca_df["DoseCombo"])
+        # normalise so each combo column sums to 1
+        ct_norm = ct.div(ct.sum(axis=0), axis=1)
+        ct_norm.index = [f"Group {i}" for i in ct_norm.index]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(ct_norm, annot=True, fmt=".2f", cmap="YlOrRd", ax=ax,
+                    linewidths=0.5, linecolor="white")
+        ax.set_title("Cluster Proportion per Dose Combo", fontsize=14)
+        ax.set_xlabel("Dose Combo")
+        ax.set_ylabel("Cluster")
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+        # also show raw counts
+        ct.index = [f"Group {i}" for i in ct.index]
+        st.markdown("**Raw cell counts  (Cluster × Dose Combo)**")
+        st.dataframe(ct)
+
+
+def dose_cluster_chi_square(pca_df, f_html):
+    """
+    Chi-squared test of independence between DoseCombo and Groups.
+    Displays the contingency table and test results.
+    """
+    import researchpy as rp
+    with st.spinner("Running chi-square test: Dose Combo vs Cluster ..."):
+        try:
+            table, results = rp.crosstab(
+                pca_df["DoseCombo"], pca_df["Groups"],
+                prop="col", test="chi-square"
+            )
+            st.markdown("**Dose Combo × Cluster — Chi-Square Test**")
+            st.dataframe(table)
+            st.dataframe(results)
+            f_html.write(table.to_html(index=True))
+            f_html.write(results.to_html(index=True))
+        except Exception as e:
+            st.warning(f"Could not run chi-square test for Dose Combo: {e}")
+
+
+def dose_feature_kde(pca_df, Features, k_cluster=3):
+    """
+    For each DoseCombo, plot KDE of every feature coloured by cluster group.
+    """
+    combos = sorted(pca_df["DoseCombo"].unique())
+    Groups = range(k_cluster)
+    for combo in combos:
+        subset = pca_df[pca_df["DoseCombo"] == combo]
+        if len(subset) < 5:
+            continue
+        st.latex(r"\color{blue}{\Large Dose\ Combo:\ %s}" % combo.replace("_", r"\_"))
+        histogramDataKDELabels(
+            Groups, subset, Features, 0,
+            Par="Groups", nColor=0, nShades=0
+        )
+
+
+def dose_pca_scatter(pca_df, k_cluster=3, figsize=(8, 6)):
+    """
+    Scatter plot in PCA space coloured by DoseCombo.
+    """
+    with st.spinner("Generating PCA scatter plot coloured by Dose Combo..."):
+        combos = sorted(pca_df["DoseCombo"].unique())
+        palette = sns.color_palette("hls", len(combos))
+        fig, ax = plt.subplots(figsize=figsize, dpi=200)
+        sns.scatterplot(x="PC1", y="PC2", hue="DoseCombo", data=pca_df,
+                        palette=palette, ax=ax, alpha=0.6)
+        ax.set_title("PCA coloured by Dose Combo", fontsize=14)
+        ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left",
+                  framealpha=1, edgecolor="black", fontsize=8)
+        fig.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)

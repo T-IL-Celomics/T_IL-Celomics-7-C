@@ -20,7 +20,8 @@ def run_analysis(
         MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
         nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
         nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-        CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files):
+        CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files,
+        dose_csv_path="", control_channel=""):
 
     # Load data
     rawdata = pd.read_pickle(path + ST)
@@ -570,9 +571,104 @@ def run_analysis(
         with st.spinner("creating ANOVA & Tukey HSD Results ..."):
             ANOVA.ANOVA(summary_files,f)
 
-    with open(path + title + 'split.pickle', 'wb') as f:
+    # ═══════════════════════════════════════════════════════════════════
+    #  Per-Dose Visualization  (only shown when a dose CSV is provided)
+    # ═══════════════════════════════════════════════════════════════════
+    dose_merged = False
+    if dose_csv_path and os.path.isfile(dose_csv_path):
+        dose_merged = merge_dose_csv_into_df(dataSpecGraphN, dose_csv_path)
+
+    if dose_merged:
+        st.title("Per-Dose Visualization (by Well Row)")
+        all_dose_cols = detect_dose_columns(dataSpecGraphN)
+
+        # Align both frames positionally (reset index)
+        dsn_reset = dataSpecGraphN.reset_index(drop=True)
+        pca_reset = pca_df.reset_index(drop=True)
+
+        if len(dsn_reset) != len(pca_reset):
+            st.error(f"Row count mismatch: dataSpecGraphN ({len(dsn_reset)}) "
+                     f"vs pca_df ({len(pca_reset)}). Skipping per-dose plots.")
+        else:
+          # Carry Groups from pca_df into dsn (needed for KDE)
+          dsn_reset["Groups"] = pca_reset["Groups"].values
+
+          well_letters = sorted(dsn_reset["WellLetter"].dropna().unique())
+          if not well_letters:
+              st.warning("No WellLetter column found — cannot split by well row.")
+
+          for wl in well_letters:
+              st.markdown("---")
+              st.subheader(f"Well Row: **{wl}**")
+
+              wl_mask = (dsn_reset["WellLetter"] == wl).values
+              dsn_sub = dsn_reset[wl_mask].copy()
+              pca_sub = pca_reset[wl_mask].copy()
+
+              # Keep only dose cols that have real data in this well row
+              wl_dose_cols = [c for c in all_dose_cols if dsn_sub[c].notna().any()]
+              if not wl_dose_cols:
+                  st.info(f"No dose category data for well row **{wl}** — skipping.")
+                  continue
+
+              st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
+
+              # Apply control-channel masking per subset
+              if control_channel.strip():
+                  mask_control_channel(dsn_sub, control_channel.strip())
+                  st.info(f"Control channel **{control_channel.strip()}** masked to NA.")
+                  # Re-filter: exclude columns that are now entirely "NA" after masking
+                  wl_dose_cols = [c for c in wl_dose_cols
+                                  if not (dsn_sub[c].astype(str) == "NA").all()]
+                  if not wl_dose_cols:
+                      st.info(f"All channels masked for well row **{wl}** — skipping.")
+                      continue
+
+              # Build DoseCombo for this well row
+              build_dose_combo_column(dsn_sub, wl_dose_cols)
+              pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
+              pca_sub["Groups"] = dsn_sub["Groups"].values
+
+              # 1) Cluster distribution bar chart
+              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Cluster Distribution"))
+              st.markdown(f"$$\\color{{blue}}{{\\Large Cluster\\ Distribution\\ per\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
+              FigureNumber += 1
+              histByKmeansDoseCombo(pca_sub, k_cluster=k_cluster)
+
+              # 2) Heatmap
+              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Heatmap"))
+              st.markdown(f"$$\\color{{blue}}{{\\Large Cluster\\ ×\\ Dose\\ Combo\\ Heatmap\\ (row\\ {wl})}}$$")
+              FigureNumber += 1
+              dose_cluster_heatmap(pca_sub, k_cluster=k_cluster)
+
+              # 3) PCA scatter
+              if "PC1" in pca_sub.columns and "PC2" in pca_sub.columns:
+                  st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                  f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: PCA"))
+                  st.markdown(f"$$\\color{{blue}}{{\\Large PCA\\ coloured\\ by\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
+                  FigureNumber += 1
+                  dose_pca_scatter(pca_sub, k_cluster=k_cluster)
+
+              # 4) Chi-square test
+              st.markdown(f"$$\\color{{blue}}{{\\Large Chi\\text{{-}}Square:\\ Dose\\ vs\\ Cluster\\ (row\\ {wl})}}$$")
+              f.write(markdown.markdown(f"Chi-Square — Well Row {wl}"))
+              dose_cluster_chi_square(pca_sub, f)
+
+              # 5) Feature KDE
+              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Feature KDE"))
+              st.markdown(f"$$\\color{{blue}}{{\\Large Feature\\ KDE\\ per\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
+              FigureNumber += 1
+              dose_feature_kde(dsn_sub, Features[:-1], k_cluster=k_cluster)
+    else:
+        st.info("No dose CSV provided or no matching dose data found "
+                "— skipping per-dose visualizations.")
+
+    with open(path + title + 'split.pickle', 'wb') as pkl_f:
         pickle.dump([pca_df, FigureNumber, kmeans_pca, labelsT, k_cluster, AE_df,
-                     dataSpecGraphN, dataEXP, Groups, Features, exp, pca], f)
+                     dataSpecGraphN, dataEXP, Groups, Features, exp, pca], pkl_f)
 
 
 st.title("TASC 2.4 Streamlit GUI")
@@ -864,6 +960,107 @@ controls = st.text_area("controls (leave blank for none)", value="").splitlines(
 # Sorting controls by length to avoid problems later
 controls.sort(key=len, reverse=True)
 
+# ── Per-Dose inputs ──────────────────────────────────────────────────
+st.markdown("""
+**Per-Dose Visualization**
+
+You can either **provide a ready-made dose CSV** or **build one** from the
+`Gab_Normalized_Combined_*.xlsx` files produced by the
+*filtering_by_protein_expression* pipeline.
+
+The CSV must have **Experiment**, **Parent** columns and one or more of
+`Cha1_Category`, `Cha2_Category`, `Cha3_Category`.
+
+Optionally specify the 4-letter name of the **control channel** (e.g. `NNIR`).
+Its category column will be set to `NA` so it does not split the dose combos.
+""")
+
+# Initialise session-state key so the built path survives reruns
+if "built_dose_csv_path" not in st.session_state:
+    st.session_state.built_dose_csv_path = ""
+
+dose_csv_path = st.text_input(
+    "Path to dose CSV (optional)",
+    value=st.session_state.built_dose_csv_path,
+    placeholder="e.g. D:\\path\\dose_dependency_summary_all_wells.csv",
+    help="Full path to an existing CSV with Experiment, Parent, Cha*_Category columns."
+)
+
+# ── Build dose CSV from Normalized-Combined Excel files ──
+with st.expander("Build dose CSV from Normalized-Combined Excel files"):
+    st.markdown(
+        "Point to the directory containing `Gab_Normalized_Combined_*.xlsx` "
+        "files. The script reads the **Area** sheet from each file, aggregates "
+        "the `Cha*_Norm` (mean) and `Cha*_Category` (majority vote) per cell, "
+        "and writes a single CSV."
+    )
+    dose_build_dir = st.text_input(
+        "Directory with Normalized-Combined Excel files",
+        value="",
+        placeholder="e.g. D:\\jeries\\output",
+        help="Directory to search for Gab_Normalized_Combined_*.xlsx files."
+    )
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        dose_glob_pattern = st.text_input(
+            "Glob pattern", value="Gab_Normalized_Combined_*.xlsx",
+            help="File-name pattern to match."
+        )
+        dose_sheet = st.text_input(
+            "Sheet name to read", value="Area",
+            help="Which sheet inside each workbook to read."
+        )
+    with col_d2:
+        dose_prefix = st.text_input(
+            "Filename prefix (stripped to derive Experiment name)",
+            value="Gab_Normalized_Combined_",
+        )
+        dose_well_map = st.text_input(
+            "Well-map JSON path (optional)", value="",
+            help="JSON mapping short well names → full experiment IDs."
+        )
+    dose_output_path = st.text_input(
+        "Output CSV path",
+        value=os.path.join(os.getcwd(), "dose_dependency_summary_all_wells.csv"),
+        help="Where to save the generated dose summary CSV."
+    )
+    if st.button("Build Dose Summary CSV"):
+        if not dose_build_dir or not os.path.isdir(dose_build_dir):
+            st.error("❌ Please enter a valid directory path.")
+        else:
+            try:
+                import importlib.util as _ilu
+                _bds_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "build_dose_summary.py")
+                _spec = _ilu.spec_from_file_location("build_dose_summary", _bds_path)
+                _bds_mod = _ilu.module_from_spec(_spec)
+                _spec.loader.exec_module(_bds_mod)
+                build_dose_summary = _bds_mod.build_dose_summary
+                with st.spinner("Building dose summary CSV…"):
+                    summary = build_dose_summary(
+                        dose_dir=dose_build_dir,
+                        excel_glob=dose_glob_pattern,
+                        sheet_name=dose_sheet,
+                        file_prefix=dose_prefix,
+                        output_csv=dose_output_path,
+                        well_map_path=dose_well_map,
+                    )
+                st.success(f"✅ Dose summary saved to **{dose_output_path}** "
+                           f"({len(summary)} cells).")
+                st.dataframe(summary.head(20))
+                # Persist the path in session_state so it survives reruns
+                st.session_state.built_dose_csv_path = dose_output_path
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Failed to build dose summary: {e}")
+
+control_channel = st.text_input(
+    "Control channel name (optional)",
+    value="",
+    placeholder="e.g. NNIR",
+    help="4-letter channel code. Its dose category will be masked to NA."
+)
+
 #summary_files_path
 summary_dir_path = st.text_input("Enter the directory path containing the summary files:")
 summary_files = None
@@ -907,7 +1104,8 @@ if st.session_state.analysis_running:
             MorphoOut, MorphoIn, combin, singleTREAT, singleCONTROL, multipleCL,
             nrows, ncols, nColor, nShades, nColorTreat, nShadesTreat,
             nColorLay, nShadesLay, figsizeEXP, figsizeTREATS, figsizeCL,
-            CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files)  # Call the analysis function from the analysis module
+            CON, CL, wellCON, controls, HC, AE_model, model_name,f,summary_files,
+            dose_csv_path=dose_csv_path, control_channel=control_channel)
         f.write("</body></html>")
     # Place your analysis code here
     # Example: st.write("Parameters:", path, ST, STgraph, MorphoFeatures, ...)
