@@ -607,26 +607,31 @@ def run_analysis(
 
               # Keep only dose cols that have real data in this well row
               wl_dose_cols = [c for c in all_dose_cols if dsn_sub[c].notna().any()]
-              if not wl_dose_cols:
-                  st.info(f"No dose category data for well row **{wl}** — skipping.")
-                  continue
+              has_dose_cols = bool(wl_dose_cols)
 
-              st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
+              if not has_dose_cols:
+                  st.info(f"No dose category data for well row **{wl}** "
+                          f"— clustering will run without dose breakdown.")
 
               # Apply control-channel masking per subset
-              if control_channel.strip():
+              if has_dose_cols and control_channel.strip():
+                  st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
                   mask_control_channel(dsn_sub, control_channel.strip())
                   st.info(f"Control channel **{control_channel.strip()}** masked to NA.")
                   # Re-filter: exclude columns that are now entirely "NA" after masking
                   wl_dose_cols = [c for c in wl_dose_cols
                                   if not (dsn_sub[c].astype(str) == "NA").all()]
-                  if not wl_dose_cols:
-                      st.info(f"All channels masked for well row **{wl}** — skipping.")
-                      continue
+                  has_dose_cols = bool(wl_dose_cols)
+                  if not has_dose_cols:
+                      st.info(f"All channels masked for well row **{wl}** "
+                              f"— clustering will run without dose breakdown.")
+              elif has_dose_cols:
+                  st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
 
-              # Build DoseCombo for this well row
-              build_dose_combo_column(dsn_sub, wl_dose_cols)
-              pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
+              # Build DoseCombo for this well row (only if dose cols remain)
+              if has_dose_cols:
+                  build_dose_combo_column(dsn_sub, wl_dose_cols)
+                  pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
 
               # ── Per-well PCA + K-means clustering ──────────────────────
               st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
@@ -639,10 +644,11 @@ def run_analysis(
               )
               FigureNumber += 1
 
+              combo_labels = dsn_sub["DoseCombo"].values if has_dose_cols else None
               well_groups, well_pc1, well_pc2 = dose_kmeans_pca(
                   dsn_sub, Features[:-1], k_cluster=k_cluster,
                   well_label=wl,
-                  dose_combo_labels=dsn_sub["DoseCombo"].values,
+                  dose_combo_labels=combo_labels,
               )
 
               if well_groups is not None:
@@ -654,6 +660,12 @@ def run_analysis(
                   pca_sub["PC2"] = well_pc2
               else:
                   pca_sub["Groups"] = dsn_sub["Groups"].values
+
+              # ── Dose-dependent visualizations (only when combos exist) ─
+              if not has_dose_cols:
+                  st.info(f"No dose combos for well row **{wl}** "
+                          f"— skipping dose-breakdown plots.")
+                  continue
 
               # ── Per-combo K-means within this well row ────────────
               combos_in_wl = sorted(dsn_sub["DoseCombo"].dropna().unique())
