@@ -31,6 +31,20 @@ def msd_exponent_func(x, D, exp):
     return D * (x ** exp)
 
 
+def _to_scalar(val):
+    """Collapse a pandas Series/ndarray to a single scalar.
+
+    When the Imaris Excel file contains duplicate IDs, a .loc lookup
+    returns a Series instead of a scalar.  This helper takes the first
+    element so that downstream arithmetic and comparisons work.
+    """
+    if hasattr(val, 'iloc'):
+        return val.iloc[0]
+    if hasattr(val, '__len__') and not isinstance(val, str) and len(val) > 0:
+        return val[0]
+    return val
+
+
 class Cell_Info(object):
 
     def __init__(self, imaris_df, parent_id, dimensions, dt, imaris_file, skip_limit, get_intensity=False):
@@ -53,12 +67,12 @@ class Cell_Info(object):
         return self.__dict__.keys()
 
     def _set_value_from_sheet(self, sheet, id_num):
-        self.__setattr__(sheet, self.imaris_df[sheet].loc[id_num][0])
+        self.__setattr__(sheet, _to_scalar(self.imaris_df[sheet].loc[id_num][0]))
 
     def _set_zir_values_from_sheet(self, sheet_words, id_num): #can delete
         sheet_list = [sheet_words+[zir] for zir in self.zirim]
         for sheet in sheet_list:
-            self.__setattr__("_".join(sheet), self.imaris_df["".join(sheet[:-1])].loc[id_num, " ".join(sheet)])
+            self.__setattr__("_".join(sheet), _to_scalar(self.imaris_df["".join(sheet[:-1])].loc[id_num, " ".join(sheet)]))
 
     def _get_average_value(self, attribute):
         attribute_list = [id_info.__getattribute__(attribute) for id_info in self.info_per_id if attribute in id_info.keys()]
@@ -310,7 +324,7 @@ class Id_Info(Cell_Info):
         self.zirim = parent.zirim
         self.dt = parent.dt
         self.skip_limit = parent.skip_limit
-        self.TimeIndex = self.imaris_df["Area"].loc[self.ID, "Time"]
+        self.TimeIndex = _to_scalar(self.imaris_df["Area"].loc[self.ID, "Time"])
         self.cell_info = parent
         self.skip = 0
         self.intensity = parent.intensity
@@ -329,7 +343,7 @@ class Id_Info(Cell_Info):
             for axis in self.axes:
                 self._set_value_from_sheet(ELLIP_LEN_SHEET + axis, self.ID)
                 for zir in self.zirim:
-                    self.__setattr__("Ellip_Ax_%s_%s" % (axis, zir), self.imaris_df["EllipsoidAxis"+axis].loc[self.ID, "Ellipsoid Axis %s %s" % (axis, zir)])
+                    self.__setattr__("Ellip_Ax_%s_%s" % (axis, zir), _to_scalar(self.imaris_df["EllipsoidAxis"+axis].loc[self.ID, "Ellipsoid Axis %s %s" % (axis, zir)]))
         except KeyError:
             return
         #Eccentricity
@@ -360,7 +374,7 @@ class Id_Info(Cell_Info):
         self.positions = []
         for zir in self.zirim:
             pos = zir.lower() + "_Pos"
-            position = self.imaris_df["Position"].loc[self.ID, "Position " + zir]
+            position = _to_scalar(self.imaris_df["Position"].loc[self.ID, "Position " + zir])
             self.__setattr__(pos, position)
             self.positions.append(position)
 
