@@ -59,16 +59,16 @@ def fit_model(model_func, xdata, ydata, p0):
         X_design = sm.add_constant(X_design)
         pval = sm.OLS(ydata, X_design).fit().f_pvalue
         return popt, r2, rmse, pval
-    except:
+    except Exception:
         return None, None, None, None
 
 # ========== STEP 2: Fit & Save CSVs ==========
 csv_exist = (
-    os.path.exists("fitting_all_models.csv")
+    os.path.exists("fitting/fitting_all_models.csv")
 )
 
 if not csv_exist:
-    df = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv"))
+    df = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "cell_data/raw_all_cells.csv"))
     df["Experiment"] = df["Experiment"].astype(str)
     df["Parent"]     = df["Parent"].astype(str)
 
@@ -99,11 +99,12 @@ if not csv_exist:
                 all_models.append(row)
 
     df_all = pd.DataFrame(all_models)
-    df_all.to_csv("fitting_all_models.csv", index=False)
-    print("fitting_all_models.csv saved.")
+    os.makedirs("fitting", exist_ok=True)
+    df_all.to_csv("fitting/fitting_all_models.csv", index=False)
+    print("fitting/fitting_all_models.csv saved.")
 else:
-    print("Loading existing fitting_all_models.csv")
-    df_all = pd.read_csv("fitting_all_models.csv")
+    print("Loading existing fitting/fitting_all_models.csv")
+    df_all = pd.read_csv("fitting/fitting_all_models.csv")
 
 # ========== STEP 3: Select Top Models & Compute NRMSE on df_top3 ==========
 # 1) significant fits
@@ -111,7 +112,7 @@ _pval_threshold = float(os.environ.get("PIPELINE_PVAL_THRESHOLD", "0.05"))
 df_sig = df_all[df_all["pval"] < _pval_threshold].copy()
 
 # === NEW: compute range for NRMSE on df_sig ===
-raw = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv"))
+raw = pd.read_csv(os.environ.get("PIPELINE_RAW_CSV", "cell_data/raw_all_cells.csv"))
 raw["Experiment"] = raw["Experiment"].astype(str)
 raw["Parent"]     = raw["Parent"].astype(str)
 exclude = {"TimeIndex", "Parent", "Experiment", "unique_id", "ds"}
@@ -147,11 +148,12 @@ df_sig = df_sig.merge(
     how="left"
 )
 
-# compute NRMSE
+# compute NRMSE (guard against zero-range features)
+df_sig["range"] = df_sig["range"].replace(0, np.nan)
 df_sig["NRMSE"] = df_sig["RMSE"] / df_sig["range"]
 
 # save updated df_sig with NRMSE
-df_sig.to_csv("fitting_significant_models_with_nrmse.csv", index=False)
+df_sig.to_csv("fitting/fitting_significant_models_with_nrmse.csv", index=False)
 
 # 2) pick Top‐3 by NRMSE
 df_top3 = (
@@ -172,9 +174,9 @@ df_top1 = (
 )
 
 # 4) save outputs
-df_top3.to_csv("fitting_top3_with_nrmse.csv", index=False)
-df_top1.to_csv("fitting_best_with_nrmse.csv",  index=False)
-print("Saved: fitting_top3_with_nrmse.csv and fitting_best_with_nrmse.csv (based on NRMSE)")
+df_top3.to_csv("fitting/fitting_top3_with_nrmse.csv", index=False)
+df_top1.to_csv("fitting/fitting_best_with_nrmse.csv",  index=False)
+print("Saved: fitting/fitting_top3_with_nrmse.csv and fitting/fitting_best_with_nrmse.csv (based on NRMSE)")
 
 # ========== STEP 4: Visualizations ==========
 # Ensure output directory exists
@@ -341,14 +343,65 @@ plt.savefig("figures/boxplot_rmse_by_feature.png", dpi=300)
 plt.close()
 
 # ========== STEP 5: Treatment Analysis ==========
-treatment_map = {
-    'C02':'BRCACON1','D02':'BRCACON2','E02':'BRCACON3',
-    'F02':'BRCACON4','G02':'BRCACON5','B02':'CON0',
-}
 
 def extract_location(exp_str):
     m = re.search(r'CHR\d+([A-Z]\d{2})', exp_str)
     return m.group(1) if m else None
+
+def _extract_treatment_from_experiment_id(exp_str):
+    """Extract the treatment code (channels + NOCO) from an experiment ID.
+
+    The experiment ID format embeds treatment channels starting at position 22,
+    followed by 'NOCO' and padding (NNN0/WH00).
+    E.g. 'AM001100425CHR2B02293TNNIRNOCONNN0...' -> 'NNIRNOCO'
+    """
+    try:
+        after = str(exp_str)[22:]
+        noco_pos = after.find("NOCO")
+        if noco_pos >= 0:
+            return after[:noco_pos + 4]
+    except Exception:
+        pass
+    return None
+
+def _load_treatment_map(df):
+    """Load treatment map from env var, or infer from Experiment IDs.
+
+    Priority:
+      1. PIPELINE_TREATMENT_MAP env var - path to a JSON file or inline JSON
+         mapping well location codes to treatment names,
+         e.g. {"B02": "NNIRNOCO", "C02": "METRNNIRNOCO"}
+      2. Auto-infer from the Experiment column in the data.
+    """
+    env_val = os.environ.get("PIPELINE_TREATMENT_MAP", "").strip()
+    if env_val:
+        if os.path.isfile(env_val):
+            with open(env_val, "r") as f:
+                tm = json.load(f)
+            print(f"Loaded treatment_map from file: {env_val}")
+            return tm
+        try:
+            tm = json.loads(env_val)
+            print(f"Loaded treatment_map from env JSON: {tm}")
+            return tm
+        except json.JSONDecodeError:
+            print(f"Warning: PIPELINE_TREATMENT_MAP is not valid JSON or file path: {env_val}")
+
+    # Infer from data
+    inferred = {}
+    for exp_str in df["Experiment"].astype(str).unique():
+        loc = extract_location(exp_str)
+        treatment = _extract_treatment_from_experiment_id(exp_str)
+        if loc and treatment and loc not in inferred:
+            inferred[loc] = treatment
+
+    if inferred:
+        print(f"Inferred treatment_map from Experiment IDs: {json.dumps(inferred, indent=2)}")
+    else:
+        print("Warning: could not infer treatment_map from data.")
+    return inferred
+
+treatment_map = _load_treatment_map(df_sig)
 
 def add_treatment_column(df):
     df = df.copy()
@@ -360,9 +413,9 @@ df_sig  = add_treatment_column(df_sig)
 df_top3 = add_treatment_column(df_top3)
 df_top1 = add_treatment_column(df_top1)
 
-df_sig_all  = df_sig[df_sig['pval'] < 0.05]
-df_sig_top3 = df_top3[df_top3['pval'] < 0.05]
-df_sig_top1 = df_top1[df_top1['pval'] < 0.05]
+df_sig_all  = df_sig[df_sig['pval'] < _pval_threshold]
+df_sig_top3 = df_top3[df_top3['pval'] < _pval_threshold]
+df_sig_top1 = df_top1[df_top1['pval'] < _pval_threshold]
 
 param_cols = [c for c in df_sig.columns if c.startswith("param_")]
 
@@ -668,7 +721,7 @@ for name, df_obj, mf in [
     out_json, imp = create_json(df_obj, num_params=5,
                                 models_per_feature=mf,
                                 transformer=sign_log1p_pipe)
-    path = f"fitting_{name}.json"
+    path = f"fitting/fitting_{name}.json"
     with open(path,"w") as f:
         json.dump(out_json, f, indent=2)
     print(f"Saved {path} (imputed+logged {imp} NaNs)")
@@ -681,13 +734,13 @@ for name, df_obj, mf in [
     out_json, imp = create_json(df_obj, num_params=5,
                                 models_per_feature=mf,
                                 transformer=log_z_pipe)
-    path = f"fitting_{name}.json"
-    with open(f"fitting_{name}.json","w") as f:
+    path = f"fitting/fitting_{name}.json"
+    with open(path,"w") as f:
         json.dump(out_json, f, indent=2)
-    print(f"Saved fitting_{name}.json (imputed+logged+z-scaled, {imp} NaNs)")
+    print(f"Saved {path} (imputed+logged+z-scaled, {imp} NaNs)")
 
 # ========== STEP 7: Check for null entries in JSON ==========
-with open("fitting_top3_models_log.json") as f:
+with open("fitting/fitting_top3_models_log.json") as f:
     data = json.load(f)
 cnt = sum(
     1

@@ -13,6 +13,16 @@ from sklearn.metrics import r2_score
 import numpy as np
 
 
+def _is_valid_number(val):
+    """Return True if val is a finite number (not NaN, not Inf, not None)."""
+    if val is None:
+        return False
+    try:
+        return np.isfinite(val)
+    except (TypeError, ValueError):
+        return False
+
+
 FIRST_PARENT = 10 ** 9
 
 PARENT_SHEETS = ["TrackVolumeMean", "TrackDisplacementLength"]
@@ -29,20 +39,6 @@ def msd_directed_motion_func(x, D, v):
 
 def msd_exponent_func(x, D, exp):
     return D * (x ** exp)
-
-
-def _to_scalar(val):
-    """Collapse a pandas Series/ndarray to a single scalar.
-
-    When the Imaris Excel file contains duplicate IDs, a .loc lookup
-    returns a Series instead of a scalar.  This helper takes the first
-    element so that downstream arithmetic and comparisons work.
-    """
-    if hasattr(val, 'iloc'):
-        return val.iloc[0]
-    if hasattr(val, '__len__') and not isinstance(val, str) and len(val) > 0:
-        return val[0]
-    return val
 
 
 class Cell_Info(object):
@@ -67,15 +63,20 @@ class Cell_Info(object):
         return self.__dict__.keys()
 
     def _set_value_from_sheet(self, sheet, id_num):
-        self.__setattr__(sheet, _to_scalar(self.imaris_df[sheet].loc[id_num][0]))
+        val = self.imaris_df[sheet].loc[id_num][0]
+        if not _is_valid_number(val):
+            val = np.nan
+        self.__setattr__(sheet, val)
 
     def _set_zir_values_from_sheet(self, sheet_words, id_num): #can delete
         sheet_list = [sheet_words+[zir] for zir in self.zirim]
         for sheet in sheet_list:
-            self.__setattr__("_".join(sheet), _to_scalar(self.imaris_df["".join(sheet[:-1])].loc[id_num, " ".join(sheet)]))
+            self.__setattr__("_".join(sheet), self.imaris_df["".join(sheet[:-1])].loc[id_num, " ".join(sheet)])
 
     def _get_average_value(self, attribute):
         attribute_list = [id_info.__getattribute__(attribute) for id_info in self.info_per_id if attribute in id_info.keys()]
+        # Filter out NaN / Inf values so they don't corrupt the average
+        attribute_list = [v for v in attribute_list if _is_valid_number(v)]
         try:
             return sum(attribute_list) / len(attribute_list)
         except ZeroDivisionError:
@@ -84,7 +85,12 @@ class Cell_Info(object):
     def _calculate_BIC(self, x, y_obs, func, func_args):
         n = len(x)
         rss = sum([(y_obs[i] - func(x[i], *func_args)) ** 2 for i in range(n)])
-        bic = n * math.log(rss/n) + len(func_args) * math.log(n)
+        if not _is_valid_number(rss) or rss <= 0 or n <= 0:
+            return np.nan
+        try:
+            bic = n * math.log(rss / n) + len(func_args) * math.log(n)
+        except (ValueError, ZeroDivisionError):
+            return np.nan
         return bic
 
     def _get_MSD(self, tau, id_list):
@@ -92,11 +98,16 @@ class Cell_Info(object):
         delta_squared_list = []
         for first_index in range(max_index - 1):
             first_id = id_list[first_index]
+            if not all(_is_valid_number(p) for p in first_id.positions):
+                continue
             for second_index in range(first_index + 1, max_index):
                 second_id = id_list[second_index]
+                if not all(_is_valid_number(p) for p in second_id.positions):
+                    continue
                 if second_id.TimeIndex - first_id.TimeIndex == tau:
                     delta_squared_sum = sum([(first_id.positions[i] - second_id.positions[i]) ** 2 for i in range(self.dimensions)])
-                    delta_squared_list.append(delta_squared_sum)
+                    if _is_valid_number(delta_squared_sum):
+                        delta_squared_list.append(delta_squared_sum)
                     break
                 elif second_id.TimeIndex - first_id.TimeIndex < tau:
                     continue
@@ -118,14 +129,21 @@ class Cell_Info(object):
             return MSDs
         if len(MSDs) < 3 or 1 not in MSDs.keys():
             return
+        # Filter out any NaN/Inf MSD values before regression
+        MSDs = {k: v for k, v in MSDs.items() if _is_valid_number(v)}
+        if len(MSDs) < 3 or 1 not in MSDs.keys():
+            return
         self.Final_MSD_1 = id_list[-1].Current_MSD_1
         #self.MSD_OLD = sum(MSDs)
         self.MSDs = MSDs
         tau_values = list(MSDs.keys())
         msd_values = list(MSDs.values())
         max_tau = tau_values[-1]
-        msd_slope, msd_intercept, r_value, p_value, stderr = linregress(x=tau_values, y=msd_values)
-        self.MSD_Linearity_R2_Score = r_value ** 2
+        try:
+            msd_slope, msd_intercept, r_value, p_value, stderr = linregress(x=tau_values, y=msd_values)
+            self.MSD_Linearity_R2_Score = r_value ** 2
+        except Exception:
+            self.MSD_Linearity_R2_Score = np.nan
         try:
             (D,), pcov = curve_fit(msd_brownian_motion_func, tau_values, msd_values)
             self.MSD_Brownian_D = D
@@ -171,7 +189,7 @@ class Cell_Info(object):
         no_none_indexes = []
         no_none_speeds = []
         for index in range(len(all_speeds)):
-            if all_speeds[index] != None:
+            if all_speeds[index] is not None and _is_valid_number(all_speeds[index]):
                 no_none_indexes.append(index)
                 no_none_speeds.append(all_speeds[index])
         if len(no_none_speeds) < window_size:
@@ -185,8 +203,8 @@ class Cell_Info(object):
             avg_speeds.append(sum(speeds_to_average) / window_size)
             speeds_we_averaged.append(speeds_to_average)
         max_avg = max(avg_speeds)
-        if avg_speeds.count(max_avg) > 1:
-            print("Max average speed appeared more than once, this shouldn't happen. Call Ori 0507479922")
+        # When multiple windows share the same max average speed we just
+        # take the first occurrence (index() already does that).
         max_index = avg_speeds.index(max_avg)
         max_avg_indexes = avg_indexes[max_index]
         max_speed = max(speeds_we_averaged[max_index])
@@ -239,6 +257,9 @@ class Cell_Info(object):
         """
 
     def _calculate_distance(self, first_info, second_info):
+        for i in range(self.dimensions):
+            if not _is_valid_number(first_info.positions[i]) or not _is_valid_number(second_info.positions[i]):
+                return np.nan
         return sum([(first_info.positions[i] - second_info.positions[i]) ** 2 for i in range(self.dimensions)]) ** 0.5
 
     def get_parent_info(self):
@@ -277,18 +298,28 @@ class Cell_Info(object):
         #Displacement was calculated differently in matlab, it would've looked like this:
         #self.Displacement = sqrt(x_PosFinal.^2 + y_PosFinal.^2 + z_PosFinal.^2) - sqrt(x_PosInitial.^2 + y_PosInitial.^2 + z_PosInitial.^2) #not python, obviously
         self.Overall_Displacement = self._calculate_distance(self.info_per_id[-1], self.info_per_id[0]) #Net Displacement
-        self.Total_Track_Displacement = sum([id_info.Displacement_From_Last_Id for id_info in self.info_per_id if "Displacement_From_Last_Id" in id_info.keys()])
+        displacements = [id_info.Displacement_From_Last_Id for id_info in self.info_per_id if "Displacement_From_Last_Id" in id_info.keys()]
+        # Filter out NaN displacements before summing
+        displacements = [d for d in displacements if _is_valid_number(d)]
+        self.Total_Track_Displacement = sum(displacements) if displacements else 0
         #self.Confinement_Ratio_OLD = self.Displacement / self.Track_Displacement_Length
-        if self.Total_Track_Displacement == 0:
+        if self.Total_Track_Displacement == 0 or not _is_valid_number(self.Overall_Displacement):
             self.Confinement_Ratio = np.nan
         else:
             self.Confinement_Ratio = self.Overall_Displacement / self.Total_Track_Displacement
         self.Mean_Curvilinear_Speed = self._get_average_value("Instantaneous_Speed")
-        self.Mean_Straight_Line_Speed = self.Overall_Displacement / ((self.info_per_id[-1].TimeIndex - self.info_per_id[0].TimeIndex) * self.dt)
+        time_span = (self.info_per_id[-1].TimeIndex - self.info_per_id[0].TimeIndex) * self.dt
+        if time_span == 0 or not _is_valid_number(time_span):
+            self.Mean_Straight_Line_Speed = np.nan
+        else:
+            self.Mean_Straight_Line_Speed = self.Overall_Displacement / time_span
         try:
-            self.Linearity_of_Forward_Progression = self.Mean_Straight_Line_Speed / self.Mean_Curvilinear_Speed
-        except TypeError:
-            pass
+            if self.Mean_Curvilinear_Speed is None or self.Mean_Curvilinear_Speed == 0 or not _is_valid_number(self.Mean_Curvilinear_Speed):
+                self.Linearity_of_Forward_Progression = np.nan
+            else:
+                self.Linearity_of_Forward_Progression = self.Mean_Straight_Line_Speed / self.Mean_Curvilinear_Speed
+        except (TypeError, ZeroDivisionError):
+            self.Linearity_of_Forward_Progression = np.nan
         self._make_MSD_calculations()
         self._get_wave_info()
 
@@ -324,7 +355,7 @@ class Id_Info(Cell_Info):
         self.zirim = parent.zirim
         self.dt = parent.dt
         self.skip_limit = parent.skip_limit
-        self.TimeIndex = _to_scalar(self.imaris_df["Area"].loc[self.ID, "Time"])
+        self.TimeIndex = self.imaris_df["Area"].loc[self.ID, "Time"]
         self.cell_info = parent
         self.skip = 0
         self.intensity = parent.intensity
@@ -335,15 +366,22 @@ class Id_Info(Cell_Info):
             pass
         
     def _calculate_eccentricity(self, axis1, axis2):
+        if not _is_valid_number(axis1) or not _is_valid_number(axis2):
+            return np.nan
         short_axis, long_axis = min([axis1, axis2]), max([axis1, axis2])
-        return (1 - (short_axis/long_axis)**2)**0.5
+        if long_axis == 0:
+            return np.nan
+        ratio_sq = (short_axis / long_axis) ** 2
+        if ratio_sq > 1:  # numerical edge case
+            return np.nan
+        return (1 - ratio_sq) ** 0.5
 
     def _get_ellipsoid_info(self):
         try:
             for axis in self.axes:
                 self._set_value_from_sheet(ELLIP_LEN_SHEET + axis, self.ID)
                 for zir in self.zirim:
-                    self.__setattr__("Ellip_Ax_%s_%s" % (axis, zir), _to_scalar(self.imaris_df["EllipsoidAxis"+axis].loc[self.ID, "Ellipsoid Axis %s %s" % (axis, zir)]))
+                    self.__setattr__("Ellip_Ax_%s_%s" % (axis, zir), self.imaris_df["EllipsoidAxis"+axis].loc[self.ID, "Ellipsoid Axis %s %s" % (axis, zir)])
         except KeyError:
             return
         #Eccentricity
@@ -372,14 +410,22 @@ class Id_Info(Cell_Info):
 
     def _get_positions(self):
         self.positions = []
+        self.has_valid_positions = True
         for zir in self.zirim:
             pos = zir.lower() + "_Pos"
-            position = _to_scalar(self.imaris_df["Position"].loc[self.ID, "Position " + zir])
+            position = self.imaris_df["Position"].loc[self.ID, "Position " + zir]
+            if not _is_valid_number(position):
+                position = np.nan
+                self.has_valid_positions = False
             self.__setattr__(pos, position)
             self.positions.append(position)
 
     def _get_velocity_acceleration_speed(self):
         time_delta = (self.TimeIndex - self.last_id_info.TimeIndex) * self.dt / 60 #hours
+        if not _is_valid_number(time_delta) or time_delta == 0:
+            return
+        if not self.has_valid_positions or (hasattr(self.last_id_info, 'has_valid_positions') and not self.last_id_info.has_valid_positions):
+            return
         self.velocities = []
         for zir in self.zirim:
             pos = zir.lower() + "_Pos"
@@ -445,7 +491,10 @@ class Id_Info(Cell_Info):
         self._get_positions()
         if self.last_id_info:
             self.Displacement_From_Last_Id = self._calculate_distance(self.last_id_info, self)
-            self.skip = self.TimeIndex - self.last_id_info.TimeIndex
+            if not _is_valid_number(self.TimeIndex) or not _is_valid_number(getattr(self.last_id_info, 'TimeIndex', None)):
+                self.skip = self.skip_limit + 1  # treat as too large a skip
+            else:
+                self.skip = self.TimeIndex - self.last_id_info.TimeIndex
             if self.skip <= self.skip_limit:
                 self._get_velocity_acceleration_speed()
                 try:

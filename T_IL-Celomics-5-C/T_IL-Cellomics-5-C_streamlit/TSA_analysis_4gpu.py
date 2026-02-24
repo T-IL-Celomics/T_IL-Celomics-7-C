@@ -175,9 +175,9 @@ mapping_df = pd.DataFrame([
     for feat, d in results.items()
 ])
 
-# ---- shard-aware output paths ----
+os.makedirs("forecasting", exist_ok=True)
 _shard_suffix = f"_shard{shard_idx}" if num_shards > 1 else ""
-csv_path = f"best_model_per_feature{_shard_suffix}.csv"
+csv_path = f"forecasting/best_model_per_feature{_shard_suffix}.csv"
 mapping_df.to_csv(csv_path, index=False)
 print(f"Saved best model mapping to {csv_path}")
 
@@ -197,10 +197,10 @@ chronos_model_dict = {
     if "best_chronos_model" in d
 }
 
-with open(f"best_model_per_feature{_shard_suffix}.json", "w") as f:
+with open(f"forecasting/best_model_per_feature{_shard_suffix}.json", "w") as f:
     json.dump(feature_model_dict, f, indent=4)
 
-with open(f"best_chronos_model_per_feature{_shard_suffix}.json", "w") as f:
+with open(f"forecasting/best_chronos_model_per_feature{_shard_suffix}.json", "w") as f:
     json.dump(chronos_model_dict, f, indent=4)
 
 # Best T5 model per feature (for embeddings — only T5 supports .embed())
@@ -210,7 +210,7 @@ t5_model_dict = {
     if "best_t5_model" in d
 }
 
-with open(f"best_t5_model_per_feature{_shard_suffix}.json", "w") as f:
+with open(f"forecasting/best_t5_model_per_feature{_shard_suffix}.json", "w") as f:
     json.dump(t5_model_dict, f, indent=4)
 
 print("Saved best model mappings to JSON files.")

@@ -597,145 +597,162 @@ def run_analysis(
           if not well_letters:
               st.warning("No WellLetter column found — cannot split by well row.")
 
+          # ── Per-well gallery: each well gets full width, results shown as gallery ──
           for wl in well_letters:
-              st.markdown("---")
-              st.subheader(f"Well Row: **{wl}**")
+                st.markdown("---")
+                st.subheader(f"Well Row: **{wl}**")
 
-              wl_mask = (dsn_reset["WellLetter"] == wl).values
-              dsn_sub = dsn_reset[wl_mask].copy()
-              pca_sub = pca_reset[wl_mask].copy()
+                wl_mask = (dsn_reset["WellLetter"] == wl).values
+                dsn_sub = dsn_reset[wl_mask].copy()
+                pca_sub = pca_reset[wl_mask].copy()
 
-              # Keep only dose cols that have real data in this well row
-              wl_dose_cols = [c for c in all_dose_cols if dsn_sub[c].notna().any()]
-              has_dose_cols = bool(wl_dose_cols)
+                # Keep only dose cols that have real data in this well row
+                wl_dose_cols = [c for c in all_dose_cols if dsn_sub[c].notna().any()]
+                has_dose_cols = bool(wl_dose_cols)
 
-              if not has_dose_cols:
-                  st.info(f"No dose category data for well row **{wl}** "
-                          f"— clustering will run without dose breakdown.")
+                if not has_dose_cols:
+                    st.info(f"No dose category data for well row **{wl}** "
+                            f"— clustering will run without dose breakdown.")
 
-              # Apply control-channel masking per subset
-              if has_dose_cols and control_channel.strip():
-                  st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
-                  mask_control_channel(dsn_sub, control_channel.strip())
-                  st.info(f"Control channel **{control_channel.strip()}** masked to NA.")
-                  # Re-filter: exclude columns that are now entirely "NA" after masking
-                  wl_dose_cols = [c for c in wl_dose_cols
-                                  if not (dsn_sub[c].astype(str) == "NA").all()]
-                  has_dose_cols = bool(wl_dose_cols)
-                  if not has_dose_cols:
-                      st.info(f"All channels masked for well row **{wl}** "
-                              f"— clustering will run without dose breakdown.")
-              elif has_dose_cols:
-                  st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
+                # Apply control-channel masking per subset
+                if has_dose_cols and control_channel.strip():
+                    st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
+                    mask_control_channel(dsn_sub, control_channel.strip())
+                    st.info(f"Control channel **{control_channel.strip()}** masked to NA.")
+                    # Re-filter: exclude columns that are now entirely "NA" after masking
+                    wl_dose_cols = [c for c in wl_dose_cols
+                                    if not (dsn_sub[c].astype(str) == "NA").all()]
+                    has_dose_cols = bool(wl_dose_cols)
+                    if not has_dose_cols:
+                        st.info(f"All channels masked for well row **{wl}** "
+                                f"— clustering will run without dose breakdown.")
+                elif has_dose_cols:
+                    st.info(f"Active channels: **{', '.join(wl_dose_cols)}**")
 
-              # Build DoseCombo for this well row (only if dose cols remain)
-              if has_dose_cols:
-                  build_dose_combo_column(dsn_sub, wl_dose_cols)
-                  pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
+                # Build DoseCombo for this well row (only if dose cols remain)
+                if has_dose_cols:
+                    build_dose_combo_column(dsn_sub, wl_dose_cols)
+                    pca_sub["DoseCombo"] = dsn_sub["DoseCombo"].values
 
-              # ── Per-well PCA + K-means clustering ──────────────────────
-              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
-              f.write(markdown.markdown(
-                  f"Figure {FigureNumber} — Well Row {wl}: Elbow + K-means"
-              ))
-              st.markdown(
-                  f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Well\\ K\\text{{-}}Means\\ "
-                  f"Clustering\\ (row\\ {wl})}}$$"
-              )
-              FigureNumber += 1
+                # ── Per-well PCA + K-means clustering ──────────────────
+                st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                f.write(markdown.markdown(
+                    f"Figure {FigureNumber} — Well Row {wl}: Elbow + K-means"
+                ))
+                st.markdown(
+                    f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Well\\ K\\text{{-}}Means\\ "
+                    f"Clustering\\ (row\\ {wl})}}$$"
+                )
+                FigureNumber += 1
 
-              combo_labels = dsn_sub["DoseCombo"].values if has_dose_cols else None
-              well_groups, well_pc1, well_pc2 = dose_kmeans_pca(
-                  dsn_sub, Features[:-1], k_cluster=k_cluster,
-                  well_label=wl,
-                  dose_combo_labels=combo_labels,
-              )
+                combo_labels = dsn_sub["DoseCombo"].values if has_dose_cols else None
+                well_groups, well_pc1, well_pc2 = dose_kmeans_pca(
+                    dsn_sub, Features[:-1], k_cluster=k_cluster,
+                    well_label=wl,
+                    dose_combo_labels=combo_labels,
+                )
 
-              if well_groups is not None:
-                  # Replace global Groups with per-well clusters
-                  dsn_sub["Groups"] = well_groups
-                  pca_sub["Groups"] = well_groups
-                  # Update PCA coordinates with per-well values
-                  pca_sub["PC1"] = well_pc1
-                  pca_sub["PC2"] = well_pc2
-              else:
-                  pca_sub["Groups"] = dsn_sub["Groups"].values
+                if well_groups is not None:
+                    # Replace global Groups with per-well clusters
+                    dsn_sub["Groups"] = well_groups
+                    pca_sub["Groups"] = well_groups
+                    # Update PCA coordinates with per-well values
+                    pca_sub["PC1"] = well_pc1
+                    pca_sub["PC2"] = well_pc2
+                else:
+                    pca_sub["Groups"] = dsn_sub["Groups"].values
 
-              # ── Dose-dependent visualizations (only when combos exist) ─
-              if not has_dose_cols:
-                  st.info(f"No dose combos for well row **{wl}** "
-                          f"— skipping dose-breakdown plots.")
-                  continue
+                # ── Dose-dependent visualizations (only when combos exist)
+                if not has_dose_cols:
+                    st.info(f"No dose combos for well row **{wl}** "
+                            f"— skipping dose-breakdown plots.")
+                    continue
 
-              # ── Per-combo K-means within this well row ────────────
-              combos_in_wl = sorted(dsn_sub["DoseCombo"].dropna().unique())
-              if combos_in_wl:
-                  st.markdown(
-                      f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Combo\\ "
-                      f"K\\text{{-}}Means\\ Clustering\\ (row\\ {wl})}}$$"
-                  )
-                  for combo_val in combos_in_wl:
-                      combo_mask = dsn_sub["DoseCombo"] == combo_val
-                      dsn_combo = dsn_sub[combo_mask].copy()
-                      if len(dsn_combo) < 2:
-                          st.info(
-                              f"Combo **{combo_val}** has only "
-                              f"{len(dsn_combo)} cell(s) — skipping."
-                          )
-                          continue
+                # ── Per-combo K-means within this well row ────────────
+                combos_in_wl = sorted(dsn_sub["DoseCombo"].dropna().unique())
+                if combos_in_wl:
+                    st.markdown(
+                        f"$$\\color{{blue}}{{\\Large Per\\text{{-}}Combo\\ "
+                        f"K\\text{{-}}Means\\ Clustering\\ (row\\ {wl})}}$$"
+                    )
+                    GALLERY_COLS = 3
+                    for batch_start in range(0, len(combos_in_wl), GALLERY_COLS):
+                        batch = combos_in_wl[batch_start:batch_start + GALLERY_COLS]
+                        gallery_cols = st.columns(len(batch))
+                        for col, combo_val in zip(gallery_cols, batch):
+                            combo_mask = dsn_sub["DoseCombo"] == combo_val
+                            dsn_combo = dsn_sub[combo_mask].copy()
+                            with col:
+                                if len(dsn_combo) < 2:
+                                    st.info(
+                                        f"Combo **{combo_val}** has only "
+                                        f"{len(dsn_combo)} cell(s) — skipping."
+                                    )
+                                    continue
 
-                      st.markdown(
-                          f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$"
-                      )
-                      f.write(markdown.markdown(
-                          f"Figure {FigureNumber} — Well {wl}, "
-                          f"Combo {combo_val}: K-means"
-                      ))
-                      st.markdown(
-                          f"**Combo: {combo_val}**  "
-                          f"({len(dsn_combo)} cells)"
-                      )
-                      FigureNumber += 1
-                      dose_combo_kmeans(
-                          dsn_combo, Features[:-1],
-                          k_cluster=k_cluster,
-                          combo_label=combo_val,
-                          well_label=wl,
-                      )
+                                st.markdown(
+                                    f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$"
+                                )
+                                f.write(markdown.markdown(
+                                    f"Figure {FigureNumber} — Well {wl}, "
+                                    f"Combo {combo_val}: K-means"
+                                ))
+                                st.markdown(
+                                    f"**Combo: {combo_val}**  "
+                                    f"({len(dsn_combo)} cells)"
+                                )
+                                FigureNumber += 1
+                                dose_combo_kmeans(
+                                    dsn_combo, Features[:-1],
+                                    k_cluster=k_cluster,
+                                    combo_label=combo_val,
+                                    well_label=wl,
+                                )
 
-              # 1) Cluster distribution bar chart
-              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
-              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Cluster Distribution"))
-              st.markdown(f"$$\\color{{blue}}{{\\Large Cluster\\ Distribution\\ per\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
-              FigureNumber += 1
-              histByKmeansDoseCombo(pca_sub, k_cluster=k_cluster)
+                # ── Results gallery: show cluster results side-by-side ──
+                _has_pca = "PC1" in pca_sub.columns and "PC2" in pca_sub.columns
+                _n_gallery = 3 + (1 if _has_pca else 0)  # dist, heatmap, pca?, chi-sq
+                _gallery_cols = st.columns(_n_gallery)
 
-              # 2) Heatmap
-              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
-              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Heatmap"))
-              st.markdown(f"$$\\color{{blue}}{{\\Large Cluster\\ ×\\ Dose\\ Combo\\ Heatmap\\ (row\\ {wl})}}$$")
-              FigureNumber += 1
-              dose_cluster_heatmap(pca_sub, k_cluster=k_cluster)
+                # 1) Cluster distribution bar chart
+                with _gallery_cols[0]:
+                    st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                    f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Cluster Distribution"))
+                    st.markdown(f"$$\\color{{blue}}{{\\Large Cluster\\ Dist.\\ (row\\ {wl})}}$$")
+                    FigureNumber += 1
+                    histByKmeansDoseCombo(pca_sub, k_cluster=k_cluster)
 
-              # 3) PCA scatter
-              if "PC1" in pca_sub.columns and "PC2" in pca_sub.columns:
-                  st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
-                  f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: PCA"))
-                  st.markdown(f"$$\\color{{blue}}{{\\Large PCA\\ coloured\\ by\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
-                  FigureNumber += 1
-                  dose_pca_scatter(pca_sub, k_cluster=k_cluster)
+                # 2) Heatmap
+                with _gallery_cols[1]:
+                    st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                    f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Heatmap"))
+                    st.markdown(f"$$\\color{{blue}}{{\\Large Heatmap\\ (row\\ {wl})}}$$")
+                    FigureNumber += 1
+                    dose_cluster_heatmap(pca_sub, k_cluster=k_cluster)
 
-              # 4) Chi-square test
-              st.markdown(f"$$\\color{{blue}}{{\\Large Chi\\text{{-}}Square:\\ Dose\\ vs\\ Cluster\\ (row\\ {wl})}}$$")
-              f.write(markdown.markdown(f"Chi-Square — Well Row {wl}"))
-              dose_cluster_chi_square(pca_sub, f)
+                # 3) PCA scatter (if available)
+                _col_idx = 2
+                if _has_pca:
+                    with _gallery_cols[_col_idx]:
+                        st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                        f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: PCA"))
+                        st.markdown(f"$$\\color{{blue}}{{\\Large PCA\\ (row\\ {wl})}}$$")
+                        FigureNumber += 1
+                        dose_pca_scatter(pca_sub, k_cluster=k_cluster)
+                    _col_idx += 1
 
-              # 5) Feature KDE
-              st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
-              f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Feature KDE"))
-              st.markdown(f"$$\\color{{blue}}{{\\Large Feature\\ KDE\\ per\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
-              FigureNumber += 1
-              dose_feature_kde(dsn_sub, Features[:-1], k_cluster=k_cluster)
+                # 4) Chi-square test
+                with _gallery_cols[_col_idx]:
+                    st.markdown(f"$$\\color{{blue}}{{\\Large Chi\\text{{-}}Square\\ (row\\ {wl})}}$$")
+                    f.write(markdown.markdown(f"Chi-Square — Well Row {wl}"))
+                    dose_cluster_chi_square(pca_sub, f)
+
+                # 5) Feature KDE (full width below the gallery)
+                st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
+                f.write(markdown.markdown(f"Figure {FigureNumber} — Well Row {wl}: Feature KDE"))
+                st.markdown(f"$$\\color{{blue}}{{\\Large Feature\\ KDE\\ per\\ Dose\\ Combo\\ (row\\ {wl})}}$$")
+                FigureNumber += 1
+                dose_feature_kde(dsn_sub, Features[:-1], k_cluster=k_cluster)
     else:
         st.info("No dose CSV provided or no matching dose data found "
                 "— skipping per-dose visualizations.")

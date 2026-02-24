@@ -30,12 +30,12 @@ device = f"cuda:{torch.cuda.current_device()}" if gpu_available else "cpu"
 print(f"[Main] CUDA available: {gpu_available}, device: {device}")
 
 # ========== 4) Load sample data ==========
-sample_file = os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv")
+sample_file = os.environ.get("PIPELINE_RAW_CSV", "cell_data/raw_all_cells.csv")
 if not os.path.exists(sample_file):
     raise FileNotFoundError(f"Sample file '{sample_file}' not found.")
 
 # ========== 5) Load selected features ==========
-_features_file = os.environ.get("PIPELINE_FEATURES_FILE", "selected_features.txt")
+_features_file = os.environ.get("PIPELINE_FEATURES_FILE", "cell_data/selected_features.txt")
 with open(_features_file, "r") as f:
     features_list = [line.strip() for line in f if line.strip()]
 
@@ -158,7 +158,8 @@ mapping_df = pd.DataFrame([
     for feat, d in results.items()
 ])
 
-csv_path = "best_model_per_feature.csv"
+os.makedirs("forecasting", exist_ok=True)
+csv_path = "forecasting/best_model_per_feature.csv"
 mapping_df.to_csv(csv_path, index=False)
 print(f"Saved best model mapping to {csv_path}")
 
@@ -178,10 +179,10 @@ chronos_model_dict = {
     if "best_chronos_model" in d
 }
 
-with open("best_model_per_feature.json", "w") as f:
+with open("forecasting/best_model_per_feature.json", "w") as f:
     json.dump(feature_model_dict, f, indent=4)
 
-with open("best_chronos_model_per_feature.json", "w") as f:
+with open("forecasting/best_chronos_model_per_feature.json", "w") as f:
     json.dump(chronos_model_dict, f, indent=4)
 
 # Best T5 model per feature (for embeddings — only T5 supports .embed())
@@ -191,7 +192,7 @@ t5_model_dict = {
     if "best_t5_model" in d
 }
 
-with open("best_t5_model_per_feature.json", "w") as f:
+with open("forecasting/best_t5_model_per_feature.json", "w") as f:
     json.dump(t5_model_dict, f, indent=4)
 
 print("Saved best model mappings to JSON files.")

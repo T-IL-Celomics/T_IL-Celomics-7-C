@@ -126,7 +126,7 @@ def run_embedding_pipeline(df, model_dict_path, output_path, dim=3):
                     result_dict[feature] = [mean_val]
                     if (exp, parent) == (first_exp, first_parent):
                         print(f"{feature} (mean): {mean_val}")
-                except:
+                except Exception:
                     result_dict[feature] = [float("nan")]
                     if (exp, parent) == (first_exp, first_parent):
                         print(f"{feature} (mean): NaN")
@@ -144,9 +144,9 @@ def run_embedding_pipeline(df, model_dict_path, output_path, dim=3):
 
 # Example usage:
 import os as _os
-_csv_path = _os.environ.get("PIPELINE_MERGED_CSV", "MergedAndFilteredExperiment008.csv")
-_model_dict = _os.environ.get("PIPELINE_CHRONOS_MODEL_DICT", "best_t5_model_per_feature.json")
-_output = _os.environ.get("PIPELINE_EMBEDDING_JSON", "Embedding008.json")
+_csv_path = _os.environ.get("PIPELINE_MERGED_CSV", "cell_data/MergedAndFilteredExperiment008.csv")
+_model_dict = _os.environ.get("PIPELINE_CHRONOS_MODEL_DICT", "forecasting/best_t5_model_per_feature.json")
+_output = _os.environ.get("PIPELINE_EMBEDDING_JSON", "embeddings/Embedding008.json")
 if _csv_path.lower().endswith((".xlsx", ".xls")):
     df = pd.read_excel(_csv_path)
 else:

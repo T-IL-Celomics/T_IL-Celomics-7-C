@@ -40,7 +40,7 @@ df["unique_id"] = df["Parent"] + "_" + df["Experiment"]
 start = np.datetime64("2000-01-01T00:00:00")
 
 # dt can vary per row; we'll compute per-row timedelta in seconds
-dt_min = pd.to_numeric(df["dt"], errors="coerce").fillna(method="ffill").fillna(method="bfill")
+dt_min = pd.to_numeric(df["dt"], errors="coerce").ffill().bfill()
 dt_seconds = (dt_min.astype(float) * 60.0).to_numpy()  # assumes dt is minutes
 
 # ds = start + TimeIndex * dt_seconds

@@ -210,7 +210,7 @@ def main():
                                            "cell_data/MergedAndFilteredExperiment008.csv"))
     ap.add_argument("--model_dict",
                     default=os.environ.get("PIPELINE_CHRONOS_MODEL_DICT",
-                                           "best_t5_model_per_feature.json"))
+                                           "forecasting/best_t5_model_per_feature.json"))
     ap.add_argument("--out_final",
                     default=os.environ.get("PIPELINE_EMBEDDING_JSON",
                                            "embeddings/summary_table_Embedding.json"))

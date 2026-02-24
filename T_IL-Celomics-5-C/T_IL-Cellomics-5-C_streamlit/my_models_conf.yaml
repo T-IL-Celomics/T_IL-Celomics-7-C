@@ -128,3 +128,4 @@ models:
     module: mmf_sa.models.timesfmforecast.TimesFMPipeline
     model_type: foundation
     framework: TimesFM
+

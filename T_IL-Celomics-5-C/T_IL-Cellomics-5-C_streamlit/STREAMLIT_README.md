@@ -16,6 +16,7 @@ A step-by-step guide for running the Cellomics-5-C analysis pipeline through a g
 8. [Understanding the Results](#8-understanding-the-results)
 9. [Keeping the App Running After You Disconnect](#9-keeping-the-app-running-after-you-disconnect)
 10. [Troubleshooting](#10-troubleshooting)
+11. [Changelog](#11-changelog)
 
 ---
 
@@ -33,13 +34,14 @@ Step 5: Curve Fitting           → Fit mathematical models to each cell's traje
 Step 6: Clustering              → Group similar cells together (with dose-category analysis)
 Step 7: ANOVA                   → Test if clusters are statistically different
 Step 8: Descriptive Statistics  → Summarize each cluster's characteristics
+Step 9: Baseline Comparison     → Compare MMF results against 4 baselines (LSTM, GRU, DLinear, Autoformer)
 ```
 
 Steps 6–8 run in **two parallel branches**:
 - **Embedding-only branch** — clusters cells using only the AI embeddings
 - **Embedding + Fitting branch** — clusters cells using both AI embeddings and mathematical curve fits (richer information)
 
-The **Run All** button executes steps in the correct dependency order: Dose Extraction runs first (before clustering), followed by Data Preparation through Descriptive Statistics.
+The **Run All** button executes steps in the correct dependency order: Dose Extraction runs first (before clustering), followed by Data Preparation through Descriptive Statistics, and finally the Baseline Comparison.
 
 ---
 
@@ -227,7 +229,7 @@ On the **left sidebar**, you'll see checkboxes for each pipeline step (including
 
 ## 7. Running the Pipeline Steps
 
-The main area shows **12 tabs** — one for each step. Work through them **from left to right**.
+The main area shows **13 tabs** — one for each step. Work through them **from left to right**.
 
 ### Step 0: Dose Extraction
 
@@ -248,7 +250,7 @@ Builds a per-cell dose-dependency summary from normalised Excel exports. This st
      ```
      Leave blank to use the built-in default mapping.
 3. Click **💊 Run Dose Extraction**
-4. Output: `dose_dependency_summary_all_wells.csv`
+4. Output: `cell_data/dose_dependency_summary_all_wells.csv`
 
 ### Step 1: Data Preparation
 
@@ -265,7 +267,7 @@ Builds a per-cell dose-dependency summary from normalised Excel exports. This st
 1. Click the **🎯 Feature Selection** tab
 2. (Optional) Adjust parameters like PCA variance threshold, correlation cutoff, etc.
 3. Click **🎯 Run Feature Selection** button
-4. Output: `selected_features.txt` and figures showing which features were selected
+4. Output: `cell_data/selected_features.txt` and figures showing which features were selected
 
 ### Step 3: Forecasting
 
@@ -279,9 +281,9 @@ This step uses AI models to evaluate how well they can predict cell behavior. It
 4. Click **📈 Run Forecasting**
 5. ⏳ This is the **longest step** — can take 1–4 hours depending on data size and GPU count
 6. Output: Three JSON files mapping each feature to its best-performing model:
-   - `best_model_per_feature.json` — best model overall (any family)
-   - `best_chronos_model_per_feature.json` — best Chronos model (T5 or Bolt)
-   - `best_t5_model_per_feature.json` — best T5 model (used by the Embedding step)
+   - `forecasting/best_model_per_feature.json` — best model overall (any family)
+   - `forecasting/best_chronos_model_per_feature.json` — best Chronos model (T5 or Bolt)
+   - `forecasting/best_t5_model_per_feature.json` — best T5 model (used by the Embedding step)
 
 ### Step 4: Embedding
 
@@ -337,11 +339,42 @@ Summarizes each cluster with mean, standard deviation, standard error, and confi
 
 Output: Excel files with descriptive statistics per cluster.
 
+### Step 9: Baseline Comparison
+
+Compares the best MMF transformer model against four baseline models (SimpleLSTM, SimpleGRU, SimpleDLinear, SimpleAutoformer) to quantify how much better the MMF models are. The baselines are trained per-cell on the same data — they are **not** part of the MMF forecasting pipeline, only used for comparison.
+
+1. Click the **🧠 Baselines vs MMF** tab
+2. Choose **Number of GPUs** (1–4) — features are split across GPUs for parallel training
+3. Click **🧠 Run Baseline Comparison**
+4. ⏳ This step trains all four baseline models per cell per feature — speed depends on GPU count and cell count
+5. Output:
+   - `baseline/baseline_comparison.csv` — per-feature comparison table with MSE, MAE, RMSE for both MMF and all baselines, plus percentage improvement columns
+   - `baseline/baseline_comparison.json` — same data as JSON
+   - `baseline/baseline_comparison_summary.txt` — headline summary (e.g. "+21% lower MSE, +17% lower MAE vs. SimpleLSTM")
+   - `results/<feature>/SimpleLSTM_metrics.csv` — per-cell LSTM metrics
+   - `results/<feature>/SimpleGRU_metrics.csv` — per-cell GRU metrics
+   - `results/<feature>/SimpleDLinear_metrics.csv` — per-cell DLinear metrics
+   - `results/<feature>/SimpleAutoformer_metrics.csv` — per-cell Autoformer metrics
+
+**Cell matching:** The comparison script automatically discovers which cells the best MMF model was evaluated on (from the existing metrics CSVs) and trains on exactly those cells. This guarantees a fair apples-to-apples comparison regardless of MAX_CELLS settings. If no MMF results exist yet, it falls back to MAX_CELLS sub-sampling with seed=42.
+
+**Multi-GPU mode:** When using 2–4 GPUs, features are split round-robin across GPUs. Each GPU trains all four baselines on its shard of features. Per-GPU logs are saved to `logs/baseline_gpu{i}.txt` and shard results are automatically merged at the end.
+
+**Baseline model ladder:**
+| Model | Architecture | Purpose |
+|---|---|---|
+| SimpleLSTM | Single-layer LSTM (hidden_size=64) | Classic RNN baseline |
+| SimpleGRU | Single-layer GRU (hidden_size=64) | Classic RNN baseline |
+| SimpleDLinear | Linear trend/residual decomposition | Strong linear baseline |
+| SimpleAutoformer | FFT auto-correlation + series decomposition | Lightweight transformer baseline |
+
 ### Run All Stages
 
 Above the tabs, there's a **🚀 Run All Enabled Stages** button that runs all enabled steps in sequence. The execution order is: Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (then the Emb+Fit branch).
 
 It has a **⏭️ Skip stages whose outputs already exist** checkbox (on by default) — if outputs from a step already exist, that step is skipped automatically. There's also a **🛑 Stop** button to cancel during execution.
+
+The execution order is: Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (both branches) → Baseline Comparison.
 
 ---
 
@@ -353,18 +386,20 @@ All outputs are saved in the project directory on the server:
 
 | Step | Output Files | Location |
 |------|-------------|----------|
-| Dose Extraction | `dose_dependency_summary_all_wells.csv` | Root |
+| Dose Extraction | `dose_dependency_summary_all_wells.csv` | `cell_data/` |
 | Data Prep | `raw_all_cells.csv` | `cell_data/` |
-| Feature Selection | `selected_features.txt`, heatmaps/plots | Root + `figures/` |
-| Forecasting | `best_model_per_feature.json`, `best_t5_model_per_feature.json` | Root |
+| Feature Selection | `selected_features.txt`, `normalized_all_cells.csv`, heatmaps/plots | `cell_data/` + `figures/` |
+| Forecasting | `best_model_per_feature.json`, `best_t5_model_per_feature.json`, etc. | `forecasting/` |
 | Embedding | `Embedding{ID}.json` | `embeddings/` |
-| Curve Fitting | `fitting_*.csv`, `fitting_*.json`, trajectory plots | Root + `figures/` |
+| Curve Fitting | `fitting_*.csv`, `fitting_*.json`, trajectory plots | `fitting/` + `figures/` |
 | Clustering | Cluster CSVs, PCA plots, dose tables, heatmaps | `clustering/` |
+| ANOVA | `ANOVA - OneWay.xlsx` | `clustering/` |
+| Descriptive Stats | `Descriptive_Table_By_Cluster_UniqueCells.xlsx` | `clustering/` |
 | Emb+Fit Clustering | Combined cluster CSVs, PCA plots, descriptive tables | `fitting/` |
-| ANOVA | `ANOVA - OneWay.xlsx` | Root |
-| Emb+Fit ANOVA | `embedding_fitting_ANOVA - OneWay.xlsx` | Root |
-| Descriptive Stats | `Descriptive_Table_By_Cluster_UniqueCells.xlsx` | Root |
-| Emb+Fit Descriptive | `embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx` | Root |
+| Emb+Fit ANOVA | `embedding_fitting_ANOVA - OneWay.xlsx` | `fitting/` |
+| Emb+Fit Descriptive | `embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx` | `fitting/` |
+| Baseline Comparison | `baseline_comparison.csv`, `baseline_comparison.json`, `baseline_comparison_summary.txt` | `baseline/` |
+| Baseline Per-Cell Metrics | `SimpleLSTM_metrics.csv`, `SimpleGRU_metrics.csv`, `SimpleDLinear_metrics.csv`, `SimpleAutoformer_metrics.csv` | `results/<feature>/` |
 
 ### Viewing results in the app
 
@@ -546,6 +581,15 @@ streamlit run app.py
 | `embedding_fitting_anova.py` | Step 7b: ANOVA (embedding + fitting) |
 | `descriptive_table_by_cluster.py` | Step 8: Descriptive statistics |
 | `embedding_fitting_descriptive_table.py` | Step 8b: Descriptive statistics (embedding + fitting) |
+| `baseline_comparison.py` | Step 9: Baseline comparison (single GPU) |
+| `run_baseline_multi_gpu.sh` | Step 9: Baseline comparison launcher (1–4 GPUs) |
+
+### Baseline model files
+
+| File | Purpose |
+|------|---------|
+| `many-model-forecasting/mmf_sa/models/rnnforecast/RNNPipeline.py` | All four baseline model classes (LSTM, GRU, DLinear, Autoformer) |
+| `many-model-forecasting/mmf_sa/models/rnnforecast/__init__.py` | Package init |
 
 ### Configuration files
 
@@ -555,3 +599,38 @@ streamlit run app.py
 | `well_map.json` | Maps short well names to full experiment IDs (for dose extraction) |
 | `streamlit_requirements.txt` | Python package dependencies |
 | `run_4gpus.sh` | Shell helper for multi-GPU forecasting |
+| `run_baseline_multi_gpu.sh` | Shell helper for multi-GPU baseline comparison |
+
+---
+
+## 11. Changelog
+
+### February 20–21, 2026
+
+#### New: Step 9 — Baseline Comparison
+
+Added a new pipeline stage that trains four baseline models (SimpleLSTM, SimpleGRU, SimpleDLinear, SimpleAutoformer) and compares their forecasting performance against the best MMF transformer model per feature. This provides a graduated comparison ladder: simple RNNs → linear decomposition → lightweight transformer → foundation models.
+
+**New files:**
+
+- **`baseline_comparison.py`** — Standalone comparison script. Reads existing MMF metrics CSVs, trains all four baselines per cell per feature on the same data, computes MSE/MAE/RMSE, and outputs percentage-improvement tables.
+- **`run_baseline_multi_gpu.sh`** — Shell launcher for 1–4 GPU parallel execution. Shards features across GPUs, monitors progress, and merges shard results automatically.
+- **`many-model-forecasting/mmf_sa/models/rnnforecast/RNNPipeline.py`** — All four baseline model classes: SimpleLSTM, SimpleGRU (single-layer RNNs with hidden_size=64), SimpleDLinear (linear trend/residual decomposition), and SimpleAutoformer (FFT-based auto-correlation + series decomposition). All share per-series z-score normalization, sliding-window training, auto-regressive forecasting, and early stopping. Uses `torch.backends.cudnn.enabled = False` to avoid cuDNN errors on some GPUs (e.g. NVIDIA TITAN Xp).
+- **`many-model-forecasting/mmf_sa/models/rnnforecast/__init__.py`** — Package init.
+
+**Modified files:**
+
+- **`app.py`** — Added "🧠 Baselines vs MMF" tab (tab 12) with:
+  - GPU selector (1–4 GPUs)
+  - Comparison summary display, full data table, percentage-improvement metric cards
+  - Per-GPU log viewer for multi-GPU runs
+  - Sidebar enable/disable checkbox
+  - Integration into "Run All" pipeline as the last stage
+- **`many-model-forecasting/mmf_sa/models/models_conf.yaml`** — Added SimpleLSTM, SimpleGRU, SimpleDLinear, and SimpleAutoformer model definitions (not in active_models — used only by the standalone comparison script).
+
+**Key design decisions:**
+
+- Baseline models are **not** part of the MMF forecasting pipeline — they run independently and are only used for comparison.
+- The comparison script **auto-discovers cells** from the best MMF model's metrics CSV, ensuring an apples-to-apples comparison regardless of MAX_CELLS settings across different runs.
+- Each baseline predicts the **last 5 time points** per cell (matching the MMF prediction_length=5), with the same train/val split as the MMF pipeline.
+- cuDNN is disabled at module level in RNNPipeline.py because the RNN models are tiny (single-layer, hidden_size=64) and cuDNN kernel overhead provides no benefit while causing crashes on some GPU architectures.

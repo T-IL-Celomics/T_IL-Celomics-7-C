@@ -9,6 +9,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.pipeline import Pipeline
 import statsmodels.api as sm
+import matplotlib
+matplotlib.use('Agg')  # headless-safe backend
 import matplotlib.pyplot as plt
 import plotly.express as px
 from matplotlib.colors import ListedColormap, BoundaryNorm
@@ -421,14 +423,65 @@ plt.savefig("figures/boxplot_rmse_by_feature.png", dpi=300)
 plt.close()
 
 # ========== STEP 5: Treatment Analysis ==========
-treatment_map = {
-    'C02':'BRCACON1','D02':'BRCACON2','E02':'BRCACON3',
-    'F02':'BRCACON4','G02':'BRCACON5','B02':'CON0',
-}
 
 def extract_location(exp_str):
     m = re.search(r'CHR\d+([A-Z]\d{2})', exp_str)
     return m.group(1) if m else None
+
+def _extract_treatment_from_experiment_id(exp_str):
+    """Extract the treatment code (channels + NOCO) from an experiment ID.
+
+    The experiment ID format embeds treatment channels starting at position 22,
+    followed by 'NOCO' and padding (NNN0/WH00).
+    E.g. 'AM001100425CHR2B02293TNNIRNOCONNN0...' -> 'NNIRNOCO'
+    """
+    try:
+        after = str(exp_str)[22:]
+        noco_pos = after.find("NOCO")
+        if noco_pos >= 0:
+            return after[:noco_pos + 4]
+    except Exception:
+        pass
+    return None
+
+def _load_treatment_map(df):
+    """Load treatment map from env var, or infer from Experiment IDs.
+
+    Priority:
+      1. PIPELINE_TREATMENT_MAP env var - path to a JSON file or inline JSON
+         mapping well location codes to treatment names,
+         e.g. {"B02": "NNIRNOCO", "C02": "METRNNIRNOCO"}
+      2. Auto-infer from the Experiment column in the data.
+    """
+    env_val = os.environ.get("PIPELINE_TREATMENT_MAP", "").strip()
+    if env_val:
+        if os.path.isfile(env_val):
+            with open(env_val, "r") as f:
+                tm = json.load(f)
+            print(f"Loaded treatment_map from file: {env_val}")
+            return tm
+        try:
+            tm = json.loads(env_val)
+            print(f"Loaded treatment_map from env JSON: {tm}")
+            return tm
+        except json.JSONDecodeError:
+            print(f"Warning: PIPELINE_TREATMENT_MAP is not valid JSON or file path: {env_val}")
+
+    # Infer from data
+    inferred = {}
+    for exp_str in df["Experiment"].astype(str).unique():
+        loc = extract_location(exp_str)
+        treatment = _extract_treatment_from_experiment_id(exp_str)
+        if loc and treatment and loc not in inferred:
+            inferred[loc] = treatment
+
+    if inferred:
+        print(f"Inferred treatment_map from Experiment IDs: {json.dumps(inferred, indent=2)}")
+    else:
+        print("Warning: could not infer treatment_map from data.")
+    return inferred
+
+treatment_map = _load_treatment_map(df_sig)
 
 def add_treatment_column(df):
     df = df.copy()
@@ -764,9 +817,9 @@ for name, df_obj, mf in [
                                 models_per_feature=mf,
                                 transformer=log_z_pipe)
     path = f"fitting/fitting_{name}.json"
-    with open(f"fitting_{name}.json","w") as f:
+    with open(path,"w") as f:
         json.dump(out_json, f, indent=2)
-    print(f"Saved fitting_{name}.json (imputed+logged+z-scaled, {imp} NaNs)")
+    print(f"Saved {path} (imputed+logged+z-scaled, {imp} NaNs)")
 
 # ========== STEP 7: Check for null entries in JSON ==========
 with open("fitting/fitting_top3_models_log.json") as f:

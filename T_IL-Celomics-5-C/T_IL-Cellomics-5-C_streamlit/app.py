@@ -36,7 +36,7 @@ os.chdir(SCRIPT_DIR)  # Change to script directory for relative paths
 
 
 def _find_file(name: str) -> Path:
-    """Find *name* in SCRIPT_DIR or common subdirs (cell_data/, embeddings/, fitting/).
+    """Find *name* in SCRIPT_DIR or common subdirs.
 
     Returns the resolved Path if found, otherwise SCRIPT_DIR / name (so the
     caller gets the default expected location).
@@ -46,6 +46,9 @@ def _find_file(name: str) -> Path:
         SCRIPT_DIR / "cell_data" / name,
         SCRIPT_DIR / "embeddings" / name,
         SCRIPT_DIR / "fitting" / name,
+        SCRIPT_DIR / "forecasting" / name,
+        SCRIPT_DIR / "clustering" / name,
+        SCRIPT_DIR / "baseline" / name,
     ]:
         if candidate.exists():
             return candidate
@@ -96,25 +99,25 @@ SCRIPTS = {
         "file": "make_raw_all_cells_from_pybatch.py",
         "name": "Data Preparation",
         "description": "Load pybatch data, create unique_id, filter cells by frame count and gaps",
-        "outputs": ["raw_all_cells.csv"]
+        "outputs": ["cell_data/raw_all_cells.csv"]
     },
     "feature_selection": {
         "file": "feature_selection.py",
         "name": "Feature Selection",
         "description": "PCA-based feature selection with correlation filtering and silhouette evaluation",
-        "outputs": ["selected_features.txt", "normalized_all_cells.csv"]
+        "outputs": ["cell_data/selected_features.txt", "cell_data/normalized_all_cells.csv"]
     },
     "forecasting": {
         "file": "TSA_analysis.py",
         "name": "Time Series Forecasting",
         "description": "Forecast with Chronos, TimesFM, Moirai foundation models via MMF framework (single GPU)",
-        "outputs": ["best_model_per_feature.json", "best_chronos_model_per_feature.json", "best_t5_model_per_feature.json"]
+        "outputs": ["forecasting/best_model_per_feature.json", "forecasting/best_chronos_model_per_feature.json", "forecasting/best_t5_model_per_feature.json"]
     },
     "forecasting_4gpu": {
         "file": "TSA_analysis_4gpu.py",
         "name": "Time Series Forecasting (4-GPU)",
         "description": "Parallel forecasting across 4 GPUs - shards features across GPUs for faster processing",
-        "outputs": ["best_model_per_feature.json", "best_chronos_model_per_feature.json", "best_t5_model_per_feature.json"],
+        "outputs": ["forecasting/best_model_per_feature.json", "forecasting/best_chronos_model_per_feature.json", "forecasting/best_t5_model_per_feature.json"],
         "multi_gpu": True,
         "shell_script": "run_4gpus.sh"
     },
@@ -135,7 +138,7 @@ SCRIPTS = {
         "file": "fit_cell_trajectory.py",
         "name": "Curve Fitting",
         "description": "Fit 12 mathematical models (linear, exponential, logistic, etc.) to cell trajectories",
-        "outputs": ["fitting_all_models.csv", "fitting_best_with_nrmse.csv", "fitting_best_model_log_scaled.json"]
+        "outputs": ["fitting/fitting_all_models.csv", "fitting/fitting_best_with_nrmse.csv", "fitting/fitting_best_model_log_scaled.json"]
     },
     "clustering": {
         "file": "embedding_unsupervised_clustering.py",
@@ -147,13 +150,13 @@ SCRIPTS = {
         "file": "ANOVA.py",
         "name": "ANOVA Analysis",
         "description": "One-way ANOVA by cluster with multi-level headers",
-        "outputs": ["ANOVA - OneWay.xlsx"]
+        "outputs": ["clustering/ANOVA - OneWay_k*.xlsx"]
     },
     "descriptive": {
         "file": "descriptive_table_by_cluster.py",
         "name": "Descriptive Statistics",
         "description": "Mean, Std, SE, CI per cluster for all features",
-        "outputs": ["Descriptive_Table_By_Cluster_UniqueCells.xlsx"]
+        "outputs": ["clustering/Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"]
     },
     "embfit_clustering": {
         "file": "embedding_fitting_unsupervised_clustering.py",
@@ -167,19 +170,26 @@ SCRIPTS = {
         "file": "embedding_fitting_anova.py",
         "name": "Emb+Fit ANOVA",
         "description": "One-way ANOVA by cluster on embedding+fitting merged data",
-        "outputs": ["embedding_fitting_ANOVA - OneWay.xlsx"]
+        "outputs": ["fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx"]
     },
     "embfit_descriptive": {
         "file": "embedding_fitting_descriptive_table.py",
         "name": "Emb+Fit Descriptive Stats",
         "description": "Mean, Std, SE, CI per cluster for embedding+fitting merged data",
-        "outputs": ["embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx"]
+        "outputs": ["fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"]
     },
     "dose_summary": {
         "file": "build_dose_summary.py",
         "name": "Dose Extraction Summary",
         "description": "Build per-cell dose-dependency summary from normalised Excel exports (aggregates _Norm means & _Category majority per Experiment/Parent)",
-        "outputs": ["dose_dependency_summary_all_wells.csv"]
+        "outputs": ["cell_data/dose_dependency_summary_all_wells.csv"]
+    },
+    "baseline_comparison": {
+        "file": "baseline_comparison.py",
+        "name": "Baseline Comparison",
+        "description": "Run baseline models (LSTM, GRU, DLinear, Autoformer) on cell data and compare MSE/MAE/RMSE against the best MMF model per feature (percentage improvement)",
+        "outputs": ["baseline/baseline_comparison.csv", "baseline/baseline_comparison.json", "baseline/baseline_comparison_summary.txt"],
+        "shell_script": "run_baseline_multi_gpu.sh"
     }
 }
 
@@ -334,20 +344,21 @@ def run_script(script_name: str, env_vars: dict = None):
 def _stage_outputs() -> dict:
     emb_json = _embedding_json_name()
     return {
-        "data_prep":          ["raw_all_cells.csv"],
-        "feature_selection":  ["selected_features.txt", "normalized_all_cells.csv"],
-        "forecasting":        ["best_model_per_feature.json", "best_chronos_model_per_feature.json", "best_t5_model_per_feature.json"],
-        "forecasting_4gpu":   ["best_model_per_feature.json", "best_chronos_model_per_feature.json", "best_t5_model_per_feature.json"],
+        "data_prep":          ["cell_data/raw_all_cells.csv"],
+        "feature_selection":  ["cell_data/selected_features.txt", "cell_data/normalized_all_cells.csv"],
+        "forecasting":        ["forecasting/best_model_per_feature.json", "forecasting/best_chronos_model_per_feature.json", "forecasting/best_t5_model_per_feature.json"],
+        "forecasting_4gpu":   ["forecasting/best_model_per_feature.json", "forecasting/best_chronos_model_per_feature.json", "forecasting/best_t5_model_per_feature.json"],
         "embedding":          [emb_json],
         "embedding_multi_gpu":[emb_json],
-        "fitting":            ["fitting_all_models.csv", "fitting_best_with_nrmse.csv", "fitting_best_model_log_scaled.json"],
+        "fitting":            ["fitting/fitting_all_models.csv", "fitting/fitting_best_with_nrmse.csv", "fitting/fitting_best_model_log_scaled.json"],
         "clustering":         ["clustering/Merged_Clusters_PCA_k*"],
-        "anova":              ["ANOVA - OneWay.xlsx"],
-        "descriptive":        ["Descriptive_Table_By_Cluster_UniqueCells.xlsx"],
+        "anova":              ["clustering/ANOVA - OneWay_k*.xlsx"],
+        "descriptive":        ["clustering/Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"],
         "embfit_clustering":  ["fitting/embedding_fitting_Merged_Clusters_PCA_k*"],
-        "embfit_anova":       ["embedding_fitting_ANOVA - OneWay.xlsx"],
-        "embfit_descriptive": ["embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx"],
-        "dose_summary":     ["dose_dependency_summary_all_wells.csv"],
+        "embfit_anova":       ["fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx"],
+        "embfit_descriptive": ["fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"],
+        "dose_summary":     ["cell_data/dose_dependency_summary_all_wells.csv"],
+        "baseline_comparison":   ["baseline/baseline_comparison.csv", "baseline/baseline_comparison.json"],
     }
 
 # Maps each stage to the stages that consume its outputs
@@ -366,6 +377,7 @@ DOWNSTREAM_MAP = {
     "embfit_anova":       [],
     "embfit_descriptive": [],
     "dose_summary":       ["clustering", "embfit_clustering"],
+    "baseline_comparison":     [],
 }
 
 # Human-readable step labels
@@ -384,6 +396,7 @@ STAGE_LABELS = {
     "embfit_anova":       "Step 7b · Emb+Fit ANOVA",
     "embfit_descriptive": "Step 8b · Emb+Fit Descriptive",
     "dose_summary":       "Step 0 · Dose Extraction",
+    "baseline_comparison":     "Step 9 · Baseline Comparison",
 }
 
 # Maps each pipeline stage to glob patterns for its output figures
@@ -419,6 +432,7 @@ STAGE_FIGURE_PATTERNS: dict[str, list[str]] = {
     "embfit_anova":       [],
     "embfit_descriptive": [],
     "dose_summary":       [],
+    "baseline_comparison":     [],
 }
 
 
@@ -478,13 +492,13 @@ def get_pipeline_env(script_key: str) -> dict:
 
     if script_key == "data_prep":
         env["PIPELINE_INPUT_EXCEL"] = data_path
-        env["PIPELINE_OUTPUT_CSV"]  = str(SCRIPT_DIR / "raw_all_cells.csv")
+        env["PIPELINE_OUTPUT_CSV"]  = str(SCRIPT_DIR / "cell_data" / "raw_all_cells.csv")
         env["PIPELINE_MIN_FRAMES"]  = str(st.session_state.get("param_min_frames", 25))
         env["PIPELINE_MAX_GAP"]     = str(st.session_state.get("param_max_gap", 5))
     elif script_key == "feature_selection":
         env["PIPELINE_RAW_CSV"]       = str(_find_file("raw_all_cells.csv"))
-        env["PIPELINE_NORM_CSV"]      = str(SCRIPT_DIR / "normalized_all_cells.csv")
-        env["PIPELINE_FEATURES_FILE"] = str(_find_file("selected_features.txt"))
+        env["PIPELINE_NORM_CSV"]      = str(SCRIPT_DIR / "cell_data" / "normalized_all_cells.csv")
+        env["PIPELINE_FEATURES_FILE"] = str(SCRIPT_DIR / "cell_data" / "selected_features.txt")
         env["PIPELINE_EXPERIMENT_ID"] = _exp_id()
         env["PIPELINE_PCA_VARIANCE"]        = str(st.session_state.get("param_pca_variance", 0.95))
         env["PIPELINE_CORR_THRESHOLD"]      = str(st.session_state.get("param_corr_threshold", 0.8))
@@ -508,6 +522,9 @@ def get_pipeline_env(script_key: str) -> dict:
         env["PIPELINE_RAW_CSV"]          = str(_find_file("raw_all_cells.csv"))
         env["PIPELINE_MAXFEV"]           = str(st.session_state.get("param_maxfev", 10000))
         env["PIPELINE_PVAL_THRESHOLD"]   = str(st.session_state.get("param_pval_threshold", 0.05))
+        treatment_map_val = st.session_state.get("param_treatment_map", "").strip()
+        if treatment_map_val:
+            env["PIPELINE_TREATMENT_MAP"] = treatment_map_val
     elif script_key == "clustering":
         env["PIPELINE_MERGED_CSV"]     = data_path or str(_find_file(_merged_csv_name()))
         env["PIPELINE_EMBEDDING_JSON"] = str(_find_file(_embedding_json_name()))
@@ -579,10 +596,15 @@ def get_pipeline_env(script_key: str) -> dict:
         env["PIPELINE_DOSE_EXCEL_GLOB"] = st.session_state.get("param_dose_excel_glob", "Gab_Normalized_Combined_*.xlsx")
         env["PIPELINE_DOSE_SHEET"]      = st.session_state.get("param_dose_sheet", "Area")
         env["PIPELINE_DOSE_PREFIX"]     = st.session_state.get("param_dose_prefix", "Gab_Normalized_Combined_")
-        env["PIPELINE_DOSE_OUTPUT"]     = str(SCRIPT_DIR / "dose_dependency_summary_all_wells.csv")
+        env["PIPELINE_DOSE_OUTPUT"]     = str(SCRIPT_DIR / "cell_data" / "dose_dependency_summary_all_wells.csv")
         well_map = st.session_state.get("param_dose_well_map", "")
         if well_map.strip():
             env["PIPELINE_DOSE_WELL_MAP"] = well_map.strip()
+    elif script_key == "baseline_comparison":
+        env["PIPELINE_RAW_CSV"]       = str(_find_file("raw_all_cells.csv"))
+        env["PIPELINE_FEATURES_FILE"] = str(_find_file("selected_features.txt"))
+        env["PIPELINE_MAX_CELLS"]     = str(st.session_state.get("param_max_cells", 500))
+        env["NUM_GPUS"]               = str(st.session_state.get("baseline_num_gpus", 1))
     return env
 
 
@@ -631,6 +653,12 @@ def check_pipeline_deps(script_key: str) -> tuple:
     elif script_key == "dose_summary":
         # Dose summary only needs the input Excel files — validated at runtime
         pass
+    elif script_key == "baseline_comparison":
+        if not _find_file("raw_all_cells.csv").exists():
+            missing.append("raw_all_cells.csv — run **Step 1 · Data Preparation** first")
+        if not _find_file("selected_features.txt").exists():
+            missing.append("selected_features.txt — run **Step 2 · Feature Selection** first")
+        # MMF metrics CSVs are optional — if missing, comparison just shows baseline-only results
     return len(missing) == 0, missing
 
 
@@ -664,6 +692,7 @@ def get_skip_enable_key(script_key: str) -> str:
         "embfit_anova": "enable_embfit_anova",
         "embfit_descriptive": "enable_embfit_descriptive",
         "dose_summary": "enable_dose_summary",
+        "baseline_comparison": "enable_baseline_comparison",
     }
     return mapping.get(script_key, "")
 
@@ -759,6 +788,8 @@ _PARAM_DEFAULTS = {
     "param_normalize_before_variance": True,
     # Forecasting
     "param_max_cells": 500,
+    # Baseline Comparison
+    "baseline_num_gpus": 1,
     # Embedding
     "param_umap_dim": 3,
     # Fitting
@@ -833,6 +864,10 @@ enable_embfit_descriptive = st.sidebar.checkbox("📋 Emb+Fit Descriptive", valu
 st.sidebar.markdown("---")
 st.sidebar.subheader("Dose Extraction")
 enable_dose_summary = st.sidebar.checkbox("💊 Dose Extraction Summary", value=True)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Baseline Comparison")
+enable_baseline_comparison = st.sidebar.checkbox("🧠 Baselines vs MMF Comparison", value=True)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📁 Script Status")
@@ -916,20 +951,21 @@ else:
 # --- Pipeline intermediate file status ---
 with st.expander("📊 Pipeline Intermediate Files"):
     _pipeline_files = {
-        "raw_all_cells.csv":                       "Step 1 → Data Preparation",
-        "normalized_all_cells.csv":                 "Step 2 → Feature Selection",
-        "selected_features.txt":                    "Step 2 → Feature Selection",
-        "best_chronos_model_per_feature.json":      "Step 3 → Forecasting",
-        "best_t5_model_per_feature.json":              "Step 3 → Forecasting",
+        "cell_data/raw_all_cells.csv":              "Step 1 → Data Preparation",
+        "cell_data/normalized_all_cells.csv":       "Step 2 → Feature Selection",
+        "cell_data/selected_features.txt":          "Step 2 → Feature Selection",
+        "forecasting/best_chronos_model_per_feature.json": "Step 3 → Forecasting",
+        "forecasting/best_t5_model_per_feature.json":      "Step 3 → Forecasting",
         _EMBEDDING_JSON_NAME:                        "Step 4 → Embedding",
-        "fitting_all_models.csv":                   "Step 5 → Curve Fitting",
+        "fitting/fitting_all_models.csv":            "Step 5 → Curve Fitting",
         "clustering/Merged_Clusters_PCA_k*":        "Step 6 → Clustering",
-        "ANOVA - OneWay.xlsx":                      "Step 7 → ANOVA",
-        "Descriptive_Table_By_Cluster_UniqueCells.xlsx": "Step 8 → Descriptive Stats",
+        "clustering/ANOVA - OneWay_k*.xlsx":         "Step 7 → ANOVA",
+        "clustering/Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx": "Step 8 → Descriptive Stats",
         "fitting/embedding_fitting_Merged_Clusters_PCA_k*": "Step 6b → Emb+Fit Clustering",
-        "embedding_fitting_ANOVA - OneWay.xlsx":       "Step 7b → Emb+Fit ANOVA",
-        "embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx": "Step 8b → Emb+Fit Descriptive",
-        "dose_dependency_summary_all_wells.csv":                              "Step 0 → Dose Extraction",
+        "fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx":    "Step 7b → Emb+Fit ANOVA",
+        "fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx": "Step 8b → Emb+Fit Descriptive",
+        "cell_data/dose_dependency_summary_all_wells.csv":     "Step 0 → Dose Extraction",
+        "baseline/baseline_comparison.csv":                     "Step 9 → Baseline Comparison",
     }
     _cols = st.columns(3)
     for _i, (_fname, _step) in enumerate(_pipeline_files.items()):
@@ -961,6 +997,7 @@ _PIPELINE_ORDER = [
     ("embfit_clustering",  enable_embfit_clustering),
     ("embfit_anova",       enable_embfit_anova),
     ("embfit_descriptive", enable_embfit_descriptive),
+    ("baseline_comparison",     enable_baseline_comparison),
 ]
 
 st.header("🚀 Run All Stages")
@@ -1009,9 +1046,31 @@ if run_all_clicked:
             with results_container:
                 with st.spinner(f"Running {stage_label}..."):
                     try:
-                        returncode, stdout, stderr = run_script(
-                            info["file"], env_vars=get_pipeline_env(key)
+                        # Multi-GPU shell dispatch for stages that support it
+                        _use_shell = (
+                            key == "baseline_comparison"
+                            and st.session_state.get("baseline_num_gpus", 1) > 1
+                            and "shell_script" in info
                         )
+                        if _use_shell:
+                            _shell_path = str(SCRIPT_DIR / info["shell_script"])
+                            _shell_env = os.environ.copy()
+                            _shell_env.update(get_pipeline_env(key))
+                            proc = subprocess.run(
+                                ["bash", _shell_path],
+                                cwd=str(SCRIPT_DIR),
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True,
+                                env=_shell_env,
+                            )
+                            returncode = proc.returncode
+                            stdout = proc.stdout
+                            stderr = ""
+                        else:
+                            returncode, stdout, stderr = run_script(
+                                info["file"], env_vars=get_pipeline_env(key)
+                            )
                         if returncode == 0:
                             st.success(f"✅ **{stage_label}** — completed.")
                             # Show generated figures for this stage
@@ -1054,7 +1113,8 @@ tabs = st.tabs([
     "📋 Descriptive",
     "🔗 Emb+Fit Cluster",
     "📊 Emb+Fit ANOVA",
-    "📋 Emb+Fit Desc"
+    "📋 Emb+Fit Desc",
+    "🧠 Baselines vs MMF"
 ])
 
 # ===== TAB 0: DOSE EXTRACTION SUMMARY =====
@@ -1247,7 +1307,7 @@ with tabs[2]:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
                 
                 # Show selected features if exists
-                feat_file = SCRIPT_DIR / "selected_features.txt"
+                feat_file = _find_file("selected_features.txt")
                 if feat_file.exists():
                     with open(feat_file, 'r') as f:
                         features = f.read().splitlines()
@@ -1856,12 +1916,12 @@ with tabs[5]:
             existing_outputs = check_outputs('fitting')
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
-                if "fitting_all_models.csv" in existing_outputs:
+                if "fitting/fitting_all_models.csv" in existing_outputs:
                     st.warning(
                         "⚠️ **fitting_all_models.csv** already exists. "
                         "The script will **skip** the heavy curve-fitting step and only "
                         "regenerate the JSON exports. To re-run fitting from scratch, "
-                        "delete `fitting_all_models.csv` first."
+                        "delete `fitting/fitting_all_models.csv` first."
                     )
                 
                 for out in existing_outputs:
@@ -1884,6 +1944,14 @@ with tabs[5]:
                         "P-value significance threshold", value=st.session_state.param_pval_threshold,
                         min_value=0.001, max_value=0.50, step=0.01, format="%.3f", key="fit_pval",
                         help="Fits with p-value above this are discarded")
+                st.text_input(
+                    "Treatment map (JSON or file path)",
+                    value=st.session_state.get("param_treatment_map", ""),
+                    key="param_treatment_map",
+                    help='Optional. JSON mapping well locations to treatment names, '
+                         'e.g. {"B02":"NNIRNOCO","C02":"METRNNIRNOCO"}, '
+                         'or a path to a .json file. Leave empty to auto-infer from Experiment IDs.'
+                )
 
             # Pipeline dependency check — blocks run if deps missing
             deps_ok = show_dependency_status('fitting')
@@ -2037,13 +2105,20 @@ with tabs[7]:
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
                 
-                xlsx_path = SCRIPT_DIR / "ANOVA - OneWay.xlsx"
-                if xlsx_path.exists():
+                # Show all per-k ANOVA files
+                _anova_files = sorted(SCRIPT_DIR.glob("clustering/ANOVA - OneWay_k*.xlsx"))
+                if not _anova_files:
+                    # Fallback: old single-file name
+                    _old = SCRIPT_DIR / "clustering" / "ANOVA - OneWay.xlsx"
+                    if _old.exists():
+                        _anova_files = [_old]
+                for _af in _anova_files:
+                    st.markdown(f"**{_af.name}**")
                     try:
-                        df = pd.read_excel(xlsx_path, header=[0,1])
+                        df = pd.read_excel(_af, header=[0,1])
                         st.dataframe(df, width='stretch')
-                    except:
-                        df = pd.read_excel(xlsx_path)
+                    except Exception:
+                        df = pd.read_excel(_af)
                         st.dataframe(df, width='stretch')
             
             # Stage parameters
@@ -2103,9 +2178,14 @@ with tabs[8]:
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
                 
-                xlsx_path = SCRIPT_DIR / "Descriptive_Table_By_Cluster_UniqueCells.xlsx"
-                if xlsx_path.exists():
-                    df = pd.read_excel(xlsx_path)
+                _desc_files = sorted(SCRIPT_DIR.glob("clustering/Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"))
+                if not _desc_files:
+                    _old = SCRIPT_DIR / "clustering" / "Descriptive_Table_By_Cluster_UniqueCells.xlsx"
+                    if _old.exists():
+                        _desc_files = [_old]
+                for _df_path in _desc_files:
+                    st.markdown(f"**{_df_path.name}**")
+                    df = pd.read_excel(_df_path)
                     st.dataframe(df, width='stretch')
             
             # Stage parameters
@@ -2258,13 +2338,18 @@ with tabs[10]:
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
                 
-                xlsx_path = SCRIPT_DIR / "embedding_fitting_ANOVA - OneWay.xlsx"
-                if xlsx_path.exists():
+                _ef_anova_files = sorted(SCRIPT_DIR.glob("fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx"))
+                if not _ef_anova_files:
+                    _old = SCRIPT_DIR / "fitting" / "embedding_fitting_ANOVA - OneWay.xlsx"
+                    if _old.exists():
+                        _ef_anova_files = [_old]
+                for _af in _ef_anova_files:
+                    st.markdown(f"**{_af.name}**")
                     try:
-                        df = pd.read_excel(xlsx_path, header=[0,1])
+                        df = pd.read_excel(_af, header=[0,1])
                         st.dataframe(df, width='stretch')
-                    except:
-                        df = pd.read_excel(xlsx_path)
+                    except Exception:
+                        df = pd.read_excel(_af)
                         st.dataframe(df, width='stretch')
             
             # Stage parameters
@@ -2324,9 +2409,14 @@ with tabs[11]:
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
                 
-                xlsx_path = SCRIPT_DIR / "embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx"
-                if xlsx_path.exists():
-                    df = pd.read_excel(xlsx_path)
+                _ef_desc_files = sorted(SCRIPT_DIR.glob("fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"))
+                if not _ef_desc_files:
+                    _old = SCRIPT_DIR / "fitting" / "embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx"
+                    if _old.exists():
+                        _ef_desc_files = [_old]
+                for _df_path in _ef_desc_files:
+                    st.markdown(f"**{_df_path.name}**")
+                    df = pd.read_excel(_df_path)
                     st.dataframe(df, width='stretch')
             
             # Stage parameters
@@ -2363,6 +2453,182 @@ with tabs[11]:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
+# ===== TAB 12: BASELINE COMPARISON =====
+with tabs[12]:
+    st.header("🧠 Baselines vs MMF — Comparison")
+    info = SCRIPTS['baseline_comparison']
+    st.markdown(f"**Script:** `{info['file']}`")
+    st.info(info['description'])
+    st.caption("ℹ️ Baseline models automatically train on the **same cells** that MMF evaluated (discovered from existing metrics CSVs). "
+               "If no MMF results exist yet, it falls back to MAX_CELLS sub-sampling with seed=42.")
+
+    if not enable_baseline_comparison:
+        show_skip_status('baseline_comparison')
+    else:
+        icon, exists = check_script_exists('baseline_comparison')
+
+        if not exists:
+            st.error(f"❌ Script not found: {info['file']}")
+        else:
+            with st.expander("📜 View Script Source Code"):
+                with open(SCRIPT_DIR / info['file'], 'r', encoding='utf-8') as f:
+                    st.code(f.read(), language='python', line_numbers=True)
+
+            # Show existing results
+            existing_outputs = check_outputs('baseline_comparison')
+            if existing_outputs:
+                st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
+
+                # Show headline summary
+                summary_path = SCRIPT_DIR / "baseline" / "baseline_comparison_summary.txt"
+                if summary_path.exists():
+                    with st.expander("📊 Comparison Summary", expanded=True):
+                        st.code(summary_path.read_text(), language="text")
+
+                # Show comparison table
+                csv_path = SCRIPT_DIR / "baseline" / "baseline_comparison.csv"
+                if csv_path.exists():
+                    comp_df = pd.read_csv(csv_path)
+                    with st.expander("📋 Full Comparison Table", expanded=True):
+                        st.dataframe(comp_df, use_container_width=True)
+
+                        # Highlight % improvement columns
+                        pct_cols = [c for c in comp_df.columns if "%lower" in c]
+                        if pct_cols:
+                            st.markdown("**Average % improvement (positive = MMF better):**")
+                            for col in pct_cols:
+                                avg = comp_df[col].mean()
+                                label = col.replace("mmf_vs_", "").replace("_%lower_", " — % lower ")
+                                if avg > 0:
+                                    st.metric(label, f"+{avg:.1f}%", delta=f"{avg:.1f}%")
+                                else:
+                                    st.metric(label, f"{avg:.1f}%", delta=f"{avg:.1f}%", delta_color="inverse")
+
+                # Show JSON
+                json_path = SCRIPT_DIR / "baseline" / "baseline_comparison.json"
+                if json_path.exists():
+                    with st.expander("📋 Comparison JSON"):
+                        with open(json_path, 'r') as f:
+                            st.json(json.load(f))
+
+            # Pipeline dependency check
+            deps_ok = show_dependency_status('baseline_comparison')
+
+            # GPU configuration
+            st.markdown("---")
+            _bl_gpu_col1, _bl_gpu_col2 = st.columns(2)
+            with _bl_gpu_col1:
+                baseline_num_gpus = st.selectbox(
+                    "Number of GPUs",
+                    options=[1, 2, 3, 4],
+                    index=[1, 2, 3, 4].index(st.session_state.get("baseline_num_gpus", 1)),
+                    key="baseline_gpu_select",
+                    help="Split features across N GPUs for parallel training. Each GPU trains all baselines on its shard of features."
+                )
+                st.session_state.baseline_num_gpus = baseline_num_gpus
+            with _bl_gpu_col2:
+                n_feats = len(open(str(_find_file("selected_features.txt"))).read().strip().split("\n")) if _find_file("selected_features.txt").exists() else "?"
+                st.info(f"📊 {n_feats} features → ~{int(n_feats)//baseline_num_gpus if isinstance(n_feats, int) else '?'} per GPU")
+
+            # Show per-GPU log files if a multi-GPU run was done previously
+            if baseline_num_gpus > 1:
+                logs_dir = SCRIPT_DIR / "logs"
+                has_logs = any((logs_dir / f"baseline_gpu{i}.txt").exists() for i in range(baseline_num_gpus))
+                if has_logs:
+                    with st.expander("📋 Per-GPU Logs"):
+                        for i in range(baseline_num_gpus):
+                            log_file = logs_dir / f"baseline_gpu{i}.txt"
+                            if log_file.exists():
+                                with st.expander(f"GPU {i} Log"):
+                                    st.text(log_file.read_text()[-5000:])
+
+            _rc, _sc = st.columns([3, 1])
+            with _rc:
+                _btn_label = f"🧠 Run Baseline Comparison ({baseline_num_gpus} GPU{'s' if baseline_num_gpus > 1 else ''})"
+                _clicked = st.button(_btn_label, type="primary", key="run_baseline_comparison", disabled=not deps_ok)
+            with _sc:
+                st.button("🛑 Stop", on_click=_request_stop, key="stop_baseline_comparison")
+            if _clicked:
+                _bl_env = get_pipeline_env('baseline_comparison')
+                if baseline_num_gpus == 1:
+                    # Single GPU — run Python directly
+                    with st.spinner(f"Running {info['file']} on 1 GPU... (trains all baselines per series per feature)"):
+                        try:
+                            returncode, stdout, stderr = run_script(info['file'], env_vars=_bl_env)
+                            if returncode == 0:
+                                st.success("✅ Completed!")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed (code {returncode})")
+                            with st.expander("📤 Output", expanded=True):
+                                if stdout:
+                                    st.text(stdout)
+                                if stderr:
+                                    st.error(stderr)
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                else:
+                    # Multi-GPU — run shell script
+                    with st.spinner(f"Running baseline comparison on {baseline_num_gpus} GPUs..."):
+                        try:
+                            shell_script = SCRIPT_DIR / "run_baseline_multi_gpu.sh"
+                            _env = os.environ.copy()
+                            _env.update(_bl_env)
+                            _kwargs = dict(
+                                cwd=str(SCRIPT_DIR),
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
+                                text=True,
+                                bufsize=1,
+                                env=_env,
+                            )
+                            if sys.platform != "win32":
+                                _kwargs["preexec_fn"] = os.setsid
+                            proc = subprocess.Popen(
+                                ["bash", str(shell_script)],
+                                **_kwargs,
+                            )
+                            st.session_state.running_pid = proc.pid
+                            st.session_state.running_stage = "run_baseline_multi_gpu.sh"
+
+                            captured: list[str] = []
+                            def _bl_reader():
+                                try:
+                                    for line in proc.stdout:
+                                        print(line, end="", flush=True)
+                                        captured.append(line)
+                                except ValueError:
+                                    pass
+
+                            _rt = threading.Thread(target=_bl_reader, daemon=True)
+                            _rt.start()
+
+                            while proc.poll() is None:
+                                if st.session_state.get("stop_requested"):
+                                    try:
+                                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                                    except Exception:
+                                        proc.kill()
+                                    st.session_state.stop_requested = False
+                                    st.warning("⚠️ Baseline comparison stopped by user.")
+                                    break
+                                time.sleep(0.5)
+                            _rt.join(timeout=5)
+
+                            rc = proc.returncode or 0
+                            output_text = "".join(captured)
+
+                            if rc == 0:
+                                st.success(f"✅ Baseline comparison completed on {baseline_num_gpus} GPUs!")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed (code {rc})")
+
+                            with st.expander("📤 Output", expanded=True):
+                                st.text(output_text[-10000:] if output_text else "(no output)")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
 # ===== FOOTER =====
 st.markdown("---")
 st.markdown("""
@@ -2386,6 +2652,7 @@ This Streamlit app **runs the existing Python scripts** in the directory:
 | 7b | `embedding_fitting_anova.py` | One-way ANOVA (embedding + fitting) |
 | 8 | `descriptive_table_by_cluster.py` | Descriptive statistics |
 | 8b | `embedding_fitting_descriptive_table.py` | Descriptive stats (embedding + fitting) |
+| 9 | `baseline_comparison.py` + `run_baseline_multi_gpu.sh` | Baseline models vs MMF comparison (**1-4 GPU**) |
 
 **To run:** `streamlit run app.py`
 

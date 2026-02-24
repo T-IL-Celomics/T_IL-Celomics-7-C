@@ -3,9 +3,9 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 
 # ---- paths ----
-INPUT = "raw_all_cells.csv"
-OUT_CLEAN = "raw_all_cells_clean.csv"
-OUT_SCALED = "raw_all_cells_scaled_for_embedding.csv"
+INPUT = "cell_data/raw_all_cells.csv"
+OUT_CLEAN = "cell_data/raw_all_cells_clean.csv"
+OUT_SCALED = "cell_data/raw_all_cells_scaled_for_embedding.csv"
 
 # ---- load ----
 df = pd.read_csv(INPUT)

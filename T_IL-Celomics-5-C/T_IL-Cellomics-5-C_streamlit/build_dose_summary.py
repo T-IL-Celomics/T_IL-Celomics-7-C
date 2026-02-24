@@ -32,7 +32,7 @@ DOSE_DIR    = os.environ.get("PIPELINE_DOSE_DIR", "").strip()
 EXCEL_GLOB  = os.environ.get("PIPELINE_DOSE_EXCEL_GLOB", "Gab_Normalized_Combined_*.xlsx")
 SHEET_NAME  = os.environ.get("PIPELINE_DOSE_SHEET", "Area")
 FILE_PREFIX = os.environ.get("PIPELINE_DOSE_PREFIX", "Gab_Normalized_Combined_")
-OUTPUT_CSV  = os.environ.get("PIPELINE_DOSE_OUTPUT", "dose_dependency_summary_all_wells.csv")
+OUTPUT_CSV  = os.environ.get("PIPELINE_DOSE_OUTPUT", "cell_data/dose_dependency_summary_all_wells.csv")
 WELL_MAP_PATH = os.environ.get("PIPELINE_DOSE_WELL_MAP", "")
 
 # ── Built-in well → full experiment-ID mapping (used when no JSON given) ─
@@ -134,15 +134,9 @@ def build_dose_summary():
         .rename(columns={"Time": "n_frames"})
     )
 
+    os.makedirs(os.path.dirname(OUTPUT_CSV) or ".", exist_ok=True)
     summary.to_csv(OUTPUT_CSV, index=False)
     print(f"\n✅ Saved {OUTPUT_CSV}  ({len(summary)} rows)")
-
-    # Also copy to cell_data/ so downstream scripts find it by default
-    _cell_data_copy = os.path.join("cell_data", os.path.basename(OUTPUT_CSV))
-    if os.path.isdir("cell_data"):
-        import shutil
-        shutil.copy2(OUTPUT_CSV, _cell_data_copy)
-        print(f"   ↳ Copied to {_cell_data_copy}")
 
     return summary
 

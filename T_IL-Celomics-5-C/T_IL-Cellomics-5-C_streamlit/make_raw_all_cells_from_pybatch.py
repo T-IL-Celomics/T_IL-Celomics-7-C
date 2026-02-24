@@ -5,7 +5,7 @@ import os
 # ---------- CONFIG ----------
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 INPUT_EXCEL = os.environ.get("PIPELINE_INPUT_EXCEL", os.path.join(SCRIPT_DIR, "summary_table.xlsx"))
-OUTPUT_CSV  = os.environ.get("PIPELINE_OUTPUT_CSV",  os.path.join(SCRIPT_DIR, "raw_all_cells.csv"))
+OUTPUT_CSV  = os.environ.get("PIPELINE_OUTPUT_CSV",  os.path.join(SCRIPT_DIR, "cell_data", "raw_all_cells.csv"))
 
 MIN_FRAMES_PER_CELL = int(os.environ.get("PIPELINE_MIN_FRAMES", "25"))
 MAX_GAP             = int(os.environ.get("PIPELINE_MAX_GAP", "5"))   # max allowed gap in TimeIndex

@@ -17,9 +17,9 @@ import time
 # PARAMETERS
 # ───────────────────────────────────────────────────────────────────────────────
 DATA_FILE = "MergedAndFilteredExperiment008.csv"
-RAW_CSV = os.environ.get("PIPELINE_RAW_CSV", "raw_all_cells.csv")
-NORM_CSV = os.environ.get("PIPELINE_NORM_CSV", "normalized_all_cells.csv")
-FEATURE_LIST_FILE = os.environ.get("PIPELINE_FEATURES_FILE", "selected_features.txt")
+RAW_CSV = os.environ.get("PIPELINE_RAW_CSV", "cell_data/raw_all_cells.csv")
+NORM_CSV = os.environ.get("PIPELINE_NORM_CSV", "cell_data/normalized_all_cells.csv")
+FEATURE_LIST_FILE = os.environ.get("PIPELINE_FEATURES_FILE", "cell_data/selected_features.txt")
 NORMALIZE_BEFORE_VARIANCE = os.environ.get("PIPELINE_NORMALIZE_BEFORE_VARIANCE", "True").lower() in ("true", "1", "yes")
 MAX_LAG = int(os.environ.get("PIPELINE_MAX_LAG", "25"))
 # Thresholds and constants for filtering

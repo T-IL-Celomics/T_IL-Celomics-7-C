@@ -100,7 +100,7 @@ except FileNotFoundError:
 with open(os.environ.get("PIPELINE_EMBEDDING_JSON", "embeddings/summary_table_Embedding.json"), "r") as f:
     embedding_data = json.load(f)
 
-with open(os.environ.get("PIPELINE_FITTING_JSON", "fitting_best_model_log_scaled.json"), "r") as f:
+with open(os.environ.get("PIPELINE_FITTING_JSON", "fitting/fitting_best_model_log_scaled.json"), "r") as f:
     fitting_data = json.load(f)
 
 _merged_csv = os.environ.get("PIPELINE_MERGED_CSV", "cell_data/MergedAndFilteredExperiment008.csv")
@@ -127,11 +127,10 @@ print(f"Treatments: {treatments}")
 all_features = [k for k in embedding_data[0].keys() if k not in ["Experiment", "Parent"]]
 
 # === 5. Scale embedding part only ===
-scaler = StandardScaler()
-scaled_cells = []
 
 # First build flat embedding per feature for scaling
 for feature in all_features:
+    scaler = StandardScaler()
     feature_matrix = []
     valid_cells = []
     for cell in embedding_data:
@@ -148,12 +147,16 @@ for feature in all_features:
         cell["embedding_scaled"][feature] = scaled[i].tolist()
 
 # === 6. Combine embedding_scaled + fitting per feature ===
+# Sort treatments by length (longest first) to prevent greedy substring matching
+# e.g. "NNIRNOCO" is a substring of "METRNNIRNOCO" and "GABYNNIRNOCO"
+treatments_sorted = sorted(treatments, key=len, reverse=True)
+
 combined_data = []
 for cell in embedding_data:
     experiment = str(cell["Experiment"])
     parent = str(cell["Parent"])
     key = (experiment, parent)
-    treatment = next((t for t in treatments if t in experiment), "Unknown")
+    treatment = next((t for t in treatments_sorted if t in experiment), "Unknown")
 
     if "embedding_scaled" not in cell:
         continue

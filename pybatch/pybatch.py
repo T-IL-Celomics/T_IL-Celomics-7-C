@@ -363,6 +363,79 @@ def get_imaris_df(imaris_path, imaris_version):
             imaris_df[key].set_index("ID", inplace=True)
         except KeyError:
             pass
+
+    # ── Rebuild IDs if duplicates are detected ───────────────────────
+    # Use the "Area" sheet as the reference — it always has Parent & Time.
+    # If any duplicate IDs exist, we throw away the original ID column
+    # and create new unique IDs based on (Parent, Time, occurrence) so
+    # that cross-sheet lookups stay consistent.
+    ref_key = "Area" if "Area" in imaris_df else None
+    has_duplicates = False
+    if ref_key is not None:
+        has_duplicates = imaris_df[ref_key].index.duplicated().any()
+
+    if has_duplicates:
+        print("WARNING: Duplicate IDs detected — rebuilding ID column for "
+              "ALL sheets from (Parent, Time).")
+
+        # Step 1: Build the mapping from the reference sheet (Area).
+        #         We match rows across sheets by (Parent, Time, dup_seq)
+        #         so that the same cell-timepoint gets the same new ID
+        #         regardless of its row position in each sheet.
+        ref = imaris_df[ref_key].copy()
+        ref["_old_id"] = ref.index
+        ref["_dup_seq"] = ref.groupby(level=0).cumcount()
+        # Key = (Parent, Time, dup_seq) → guaranteed unique per row
+        ref["_key"] = list(zip(
+            ref["Parent"].astype(int),
+            ref["Time"].astype(int),
+            ref["_dup_seq"],
+        ))
+        # Sequential new IDs starting at 1
+        ref["_new_id"] = range(1, len(ref) + 1)
+        key_to_new = dict(zip(ref["_key"], ref["_new_id"]))
+        next_id = len(ref) + 1  # for rows found only in other sheets
+
+        # Step 2: Apply the new IDs only to sheets whose index is "ID"
+        #         AND that also contain both "Parent" and "Time" columns.
+        #         Other sheets (e.g. TrackVolumeMean) use ID with a
+        #         different meaning — leave them untouched.
+        rebuilt_sheets = []
+        for key in list(imaris_df.keys()):
+            df = imaris_df[key]
+            if df.index.name != "ID" or "Parent" not in df.columns or "Time" not in df.columns:
+                continue  # skip — this sheet's ID has another meaning
+
+            df = df.copy()
+            df["_old_id"] = df.index
+            df["_dup_seq"] = df.groupby(level=0).cumcount()
+            new_ids = []
+            for old_id, seq, parent, time_val in zip(
+                df["_old_id"], df["_dup_seq"],
+                df["Parent"].astype(int), df["Time"].astype(int),
+            ):
+                row_key = (parent, time_val, seq)
+                mapped = key_to_new.get(row_key)
+                if mapped is not None:
+                    new_ids.append(mapped)
+                else:
+                    # Row exists in this sheet but not in the reference —
+                    # give it a fresh sequential ID and register it so
+                    # other sheets with the same (Parent,Time,seq) match.
+                    key_to_new[row_key] = next_id
+                    new_ids.append(next_id)
+                    next_id += 1
+            df.index = new_ids
+            df.index.name = "ID"
+            df.drop(columns=["_old_id", "_dup_seq"], inplace=True)
+            imaris_df[key] = df
+            rebuilt_sheets.append(key)
+
+        dup_ids = ref["_old_id"][ref.index.duplicated(keep=False)].unique().tolist()
+        print(f"  Rebuilt IDs for {len(rebuilt_sheets)} sheets: {rebuilt_sheets}. "
+              f"Duplicate old IDs: {dup_ids}. "
+              f"Total unique new IDs: {next_id - 1}")
+
     return imaris_df
 
 
@@ -372,14 +445,26 @@ def get_all_parents(imaris_df, dimensions, dt, imaris_file, get_intensity=False,
     all_time_ids = []
     cell_nums = imaris_df["Acceleration"]["Parent"].unique().tolist()
     FIRST_PARENT = cell_nums[0]
+    skipped_cells = 0
     #Get most info
     for parent_id in cell_nums:
-        parent = Cell_Info(imaris_df, parent_id, dimensions, dt, imaris_file, skip_limit, get_intensity)
-        parent.get_parent_info()
-        parent.get_info_per_id()
-        parent.get_final_calculations()
-        all_parents.append(parent)
-        all_time_ids = list(set(all_time_ids + [id_info.TimeIndex for id_info in parent.info_per_id]))
+        try:
+            parent = Cell_Info(imaris_df, parent_id, dimensions, dt, imaris_file, skip_limit, get_intensity)
+            parent.get_parent_info()
+            parent.get_info_per_id()
+            if len(parent.info_per_id) == 0:
+                print("WARNING: Skipping cell %d — no valid ID data points." % parent_id)
+                skipped_cells += 1
+                continue
+            parent.get_final_calculations()
+            all_parents.append(parent)
+            all_time_ids = list(set(all_time_ids + [id_info.TimeIndex for id_info in parent.info_per_id]))
+        except Exception as e:
+            print("WARNING: Skipping cell %d due to error: %s" % (parent_id, str(e)))
+            skipped_cells += 1
+            continue
+    if skipped_cells > 0:
+        print("Skipped %d cells out of %d due to NaN/invalid data." % (skipped_cells, len(cell_nums)))
     return all_parents, all_time_ids
 
 
@@ -787,7 +872,7 @@ def create_summary_table(rename_dir, output_file, drop_report_path, initial_sess
                                             for imaris_file in imaris_files]
                 summary_df = pd.concat([pd.read_excel(dropped_file) for dropped_file in dropped_output_files],
                                        ignore_index=True)
-                summary_df.drop(columns="Unnamed: 0", inplace=True)
+                summary_df.drop(columns="Unnamed: 0", inplace=True, errors="ignore")
                 if len(summary_df) <= 1048575:  # max excel sheet size
                     with pd.ExcelWriter(output_file, mode="w", engine="openpyxl") as writer:
                         summary_df.to_excel(writer)

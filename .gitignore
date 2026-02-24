@@ -5,6 +5,7 @@
 *.h5
 *.hdf5
 *.parquet
+*.json
 
 # ── Excel / Imaris data (comment out if you WANT these tracked) ──
 *.xlsx
