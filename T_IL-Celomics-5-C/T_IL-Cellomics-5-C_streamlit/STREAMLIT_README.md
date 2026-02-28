@@ -25,23 +25,24 @@ A step-by-step guide for running the Cellomics-5-C analysis pipeline through a g
 This pipeline analyzes the movement and shape (morphokinetics) of cells over time. It takes raw cell tracking data and runs it through a series of analysis steps:
 
 ```
-Step 0: Dose Extraction         → Build per-cell dose-dependency summary from normalised Excel exports
-Step 1: Data Preparation        → Clean and filter the raw tracking data
-Step 2: Feature Selection       → Pick the most informative cell measurements
-Step 3: Forecasting             → AI models predict cell behavior to find patterns
-Step 4: Embedding               → Convert time-series data into compact representations
-Step 5: Curve Fitting           → Fit mathematical models to each cell's trajectory
-Step 6: Clustering              → Group similar cells together (with dose-category analysis)
-Step 7: ANOVA                   → Test if clusters are statistically different
-Step 8: Descriptive Statistics  → Summarize each cluster's characteristics
-Step 9: Baseline Comparison     → Compare MMF results against 4 baselines (LSTM, GRU, DLinear, Autoformer)
+Step 0:  Dose Extraction         → Build per-cell dose-dependency summary from normalised Excel exports
+Step 1:  Data Preparation        → Clean and filter the raw tracking data
+Step 2:  Feature Selection       → Pick the most informative cell measurements
+Step 3:  Forecasting             → AI models predict cell behavior to find patterns
+Step 4:  Embedding               → Convert time-series data into compact representations
+Step 5:  Curve Fitting           → Fit mathematical models to each cell's trajectory
+Step 6:  Clustering              → Group similar cells together (with dose-category analysis)
+Step 7:  ANOVA                   → Test if clusters are statistically different
+Step 8:  Descriptive Statistics  → Summarize each cluster's characteristics
+Step 9:  Two-Way ANOVA           → Compare dynamic clustering vs static (mean-based) clustering
+Step 10: Baseline Comparison     → Compare MMF results against 4 baselines (LSTM, GRU, DLinear, Autoformer)
 ```
 
 Steps 6–8 run in **two parallel branches**:
 - **Embedding-only branch** — clusters cells using only the AI embeddings
 - **Embedding + Fitting branch** — clusters cells using both AI embeddings and mathematical curve fits (richer information)
 
-The **Run All** button executes steps in the correct dependency order: Dose Extraction runs first (before clustering), followed by Data Preparation through Descriptive Statistics, and finally the Baseline Comparison.
+The **Run All** button executes steps in the correct dependency order: Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (both branches) → Two-Way ANOVA → Baseline Comparison.
 
 ---
 
@@ -339,7 +340,29 @@ Summarizes each cluster with mean, standard deviation, standard error, and confi
 
 Output: Excel files with descriptive statistics per cluster.
 
-### Step 9: Baseline Comparison
+### Step 9: Two-Way ANOVA
+
+Compares the clustering results from this pipeline (dynamic, time-series–based) against a static (mean-based) clustering baseline from a previous project.
+
+1. Click the **📊 Two-Way ANOVA** tab
+2. The step auto-detects cluster assignments from Steps 6 and 6b, and requires a static clustering CSV (`cell_data/static_clustering_raw_data.csv`)
+3. Click **📊 Run Two-Way ANOVA**
+4. Output (in `results/`):
+   - `two_way_anova_emb_vs_static_k{k}.xlsx` / `.csv` — Embedding clustering vs Static
+   - `two_way_anova_embfit_vs_static_k{k}.xlsx` / `.csv` — Embedding+Fitting clustering vs Static
+   - Z-score heatmaps and Tukey HSD post-hoc results per feature
+
+**What the output shows:**
+| Column | Meaning |
+|--------|--------|
+| Method p-value | Are the two clustering methods different? |
+| Cluster p-value | Are clusters different from each other? |
+| Method × Cluster p-value | Does the clustering method change the cluster differences? |
+| FDR-adjusted p-values | Corrected for multiple testing (Benjamini-Hochberg) |
+
+The analysis also produces **z-score heatmaps** split by morphological vs. kinetic feature categories, and **Tukey HSD** post-hoc comparisons.
+
+### Step 10: Baseline Comparison
 
 Compares the best MMF transformer model against four baseline models (SimpleLSTM, SimpleGRU, SimpleDLinear, SimpleAutoformer) to quantify how much better the MMF models are. The baselines are trained per-cell on the same data — they are **not** part of the MMF forecasting pipeline, only used for comparison.
 
@@ -370,11 +393,11 @@ Compares the best MMF transformer model against four baseline models (SimpleLSTM
 
 ### Run All Stages
 
-Above the tabs, there's a **🚀 Run All Enabled Stages** button that runs all enabled steps in sequence. The execution order is: Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (then the Emb+Fit branch).
+Above the tabs, there's a **🚀 Run All Enabled Stages** button that runs all enabled steps in sequence. The execution order is:
+
+> Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (both branches) → Two-Way ANOVA → Baseline Comparison
 
 It has a **⏭️ Skip stages whose outputs already exist** checkbox (on by default) — if outputs from a step already exist, that step is skipped automatically. There's also a **🛑 Stop** button to cancel during execution.
-
-The execution order is: Dose Extraction → Data Preparation → Feature Selection → Forecasting → Embedding → Curve Fitting → Clustering → ANOVA → Descriptive Stats (both branches) → Baseline Comparison.
 
 ---
 
@@ -398,6 +421,7 @@ All outputs are saved in the project directory on the server:
 | Emb+Fit Clustering | Combined cluster CSVs, PCA plots, descriptive tables | `fitting/` |
 | Emb+Fit ANOVA | `embedding_fitting_ANOVA - OneWay.xlsx` | `fitting/` |
 | Emb+Fit Descriptive | `embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells.xlsx` | `fitting/` |
+| Two-Way ANOVA | `two_way_anova_emb_vs_static_k{k}.xlsx`, `two_way_anova_embfit_vs_static_k{k}.xlsx`, z-score heatmaps | `results/` |
 | Baseline Comparison | `baseline_comparison.csv`, `baseline_comparison.json`, `baseline_comparison_summary.txt` | `baseline/` |
 | Baseline Per-Cell Metrics | `SimpleLSTM_metrics.csv`, `SimpleGRU_metrics.csv`, `SimpleDLinear_metrics.csv`, `SimpleAutoformer_metrics.csv` | `results/<feature>/` |
 
@@ -581,8 +605,10 @@ streamlit run app.py
 | `embedding_fitting_anova.py` | Step 7b: ANOVA (embedding + fitting) |
 | `descriptive_table_by_cluster.py` | Step 8: Descriptive statistics |
 | `embedding_fitting_descriptive_table.py` | Step 8b: Descriptive statistics (embedding + fitting) |
-| `baseline_comparison.py` | Step 9: Baseline comparison (single GPU) |
-| `run_baseline_multi_gpu.sh` | Step 9: Baseline comparison launcher (1–4 GPUs) |
+| `two_way_anova.py` | Step 9: Two-Way ANOVA (dynamic vs static clustering) |
+| `fit_cell_trajectory_robust.py` | Step 5 alt: Robust curve fitting with bounds & overflow protection |
+| `baseline_comparison.py` | Step 10: Baseline comparison (single GPU) |
+| `run_baseline_multi_gpu.sh` | Step 10: Baseline comparison launcher (1–4 GPUs) |
 
 ### Baseline model files
 
@@ -601,13 +627,77 @@ streamlit run app.py
 | `run_4gpus.sh` | Shell helper for multi-GPU forecasting |
 | `run_baseline_multi_gpu.sh` | Shell helper for multi-GPU baseline comparison |
 
+### Morphokinetic endpoints (standalone analysis)
+
+| File | Purpose |
+|------|--------|
+| `morphokinetic_endpoints/01_make_dose_categories.py` | Assign dose categories from raw metadata |
+| `morphokinetic_endpoints/02_make_dose_combo.py` | Create dose-combination labels |
+| `morphokinetic_endpoints/03_track_level_summary.py` | Compute per-track summary statistics |
+| `morphokinetic_endpoints/04_cluster_kmeans_pca.py` | K-Means clustering with PCA visualization |
+| `morphokinetic_endpoints/05_cluster_differential_abundance.py` | Differential abundance testing across clusters |
+| `morphokinetic_endpoints/06_state_transition_rate.py` | State transition rate analysis |
+| `morphokinetic_endpoints/07_distribution_shift_distances.py` | Wasserstein, KS, and energy distance between conditions |
+| `morphokinetic_endpoints/08_dispersion_tests.py` | Levene's and Brown-Forsythe dispersion tests |
+| `morphokinetic_endpoints/09_mean_pc_shift_bootstrap.py` | Bootstrap mean PC shift between groups |
+| `morphokinetic_endpoints/10_feature_effect_sizes_fdr.py` | Effect sizes with FDR correction (volcano plots) |
+| `morphokinetic_endpoints/11_curve_fitting_10_models.py` | Fit 10 mathematical models per feature |
+| `morphokinetic_endpoints/12_forecast_predictability.py` | Forecast predictability assessment |
+| `morphokinetic_endpoints/13_nested_groupcv_discriminability.py` | Nested group-CV discriminability analysis |
+| `morphokinetic_endpoints/dose_morphokinetic_endpoints.ipynb` | Jupyter/Colab notebook driver for all 13 scripts |
+
+These scripts are **standalone** — they are not integrated into the Streamlit app. Run them via the notebook or individually from the command line.
+
+### Other files
+
+| File | Purpose |
+|------|--------|
+| `DOCUMENTATION.md` | Comprehensive technical documentation |
+| `STREAMLIT_README.md` | This user guide |
+| `poster_cellomics7.pptx` | Conference poster (Cellomics-7-C) |
+
 ---
 
 ## 11. Changelog
 
+### February 28, 2026
+
+#### New: Step 9 — Two-Way ANOVA
+
+Added a new pipeline stage that compares dynamic clustering (embedding-based and embedding+fitting) against a static (mean-based) clustering baseline using two-way ANOVA (Method × Cluster) with FDR correction.
+
+**New files:**
+
+- **`two_way_anova.py`** — Runs two separate two-way ANOVAs per feature: (1) Embedding clustering vs Static, (2) Embedding+Fitting clustering vs Static. Reports Method, Cluster, and Interaction p-values with Benjamini-Hochberg FDR correction. Generates z-score heatmaps split by morphological vs kinetic feature categories, and Tukey HSD post-hoc comparison tables.
+
+**Modified files:**
+
+- **`app.py`** — Added "📊 Two-Way ANOVA" tab (tab 12) with sidebar enable/disable checkbox and integration into the "Run All" pipeline (runs after Descriptive Stats, before Baseline Comparison).
+
+#### New: Morphokinetic Endpoints Module
+
+Added a standalone analysis package (`morphokinetic_endpoints/`) with 13 numbered scripts covering dose categorization, clustering, differential abundance, state transitions, distribution shifts, dispersion tests, bootstrap PC shifts, effect sizes, curve fitting, forecast predictability, and discriminability analysis. Driven by a Jupyter/Colab notebook.
+
+#### New: Robust Curve Fitting
+
+Added `fit_cell_trajectory_robust.py` — an enhanced curve-fitting script with overflow-protected model functions (clipped exponents), additional models (Gompertz, Weibull, Poly3, Poly4, Sigmoid-4p), and improved numerical stability.
+
+#### Renumbered: Baseline Comparison → Step 10
+
+Baseline Comparison was previously Step 9; it is now Step 10 to accommodate Two-Way ANOVA.
+
+#### Other changes
+
+- **`Embedding.py` / `Embedding_multi_gpu.py`** — Minor fixes
+- **`embedding_unsupervised_clustering.py` / `embedding_fitting_unsupervised_clustering.py`** — Extended dose-category analysis and cross-tabulation
+- **`pybatch/pybatch.py` / `pybatch_objects.py` / `batch_calculations.py`** — NaN guards, `_to_scalar` helpers for `.loc` lookups to avoid Series ambiguity
+- **`TASC/TASC_streamlit_app/TASC_GUI.py` / `util.py`** — Minor UI updates
+- Added `DOCUMENTATION.md` — Comprehensive technical documentation
+- Added `poster_cellomics7.pptx` — Conference poster
+
 ### February 20–21, 2026
 
-#### New: Step 9 — Baseline Comparison
+#### New: Step 10 — Baseline Comparison (previously Step 9)
 
 Added a new pipeline stage that trains four baseline models (SimpleLSTM, SimpleGRU, SimpleDLinear, SimpleAutoformer) and compares their forecasting performance against the best MMF transformer model per feature. This provides a graduated comparison ladder: simple RNNs → linear decomposition → lightweight transformer → foundation models.
 
@@ -615,22 +705,9 @@ Added a new pipeline stage that trains four baseline models (SimpleLSTM, SimpleG
 
 - **`baseline_comparison.py`** — Standalone comparison script. Reads existing MMF metrics CSVs, trains all four baselines per cell per feature on the same data, computes MSE/MAE/RMSE, and outputs percentage-improvement tables.
 - **`run_baseline_multi_gpu.sh`** — Shell launcher for 1–4 GPU parallel execution. Shards features across GPUs, monitors progress, and merges shard results automatically.
-- **`many-model-forecasting/mmf_sa/models/rnnforecast/RNNPipeline.py`** — All four baseline model classes: SimpleLSTM, SimpleGRU (single-layer RNNs with hidden_size=64), SimpleDLinear (linear trend/residual decomposition), and SimpleAutoformer (FFT-based auto-correlation + series decomposition). All share per-series z-score normalization, sliding-window training, auto-regressive forecasting, and early stopping. Uses `torch.backends.cudnn.enabled = False` to avoid cuDNN errors on some GPUs (e.g. NVIDIA TITAN Xp).
+- **`many-model-forecasting/mmf_sa/models/rnnforecast/RNNPipeline.py`** — All four baseline model classes.
 - **`many-model-forecasting/mmf_sa/models/rnnforecast/__init__.py`** — Package init.
 
 **Modified files:**
 
-- **`app.py`** — Added "🧠 Baselines vs MMF" tab (tab 12) with:
-  - GPU selector (1–4 GPUs)
-  - Comparison summary display, full data table, percentage-improvement metric cards
-  - Per-GPU log viewer for multi-GPU runs
-  - Sidebar enable/disable checkbox
-  - Integration into "Run All" pipeline as the last stage
-- **`many-model-forecasting/mmf_sa/models/models_conf.yaml`** — Added SimpleLSTM, SimpleGRU, SimpleDLinear, and SimpleAutoformer model definitions (not in active_models — used only by the standalone comparison script).
-
-**Key design decisions:**
-
-- Baseline models are **not** part of the MMF forecasting pipeline — they run independently and are only used for comparison.
-- The comparison script **auto-discovers cells** from the best MMF model's metrics CSV, ensuring an apples-to-apples comparison regardless of MAX_CELLS settings across different runs.
-- Each baseline predicts the **last 5 time points** per cell (matching the MMF prediction_length=5), with the same train/val split as the MMF pipeline.
-- cuDNN is disabled at module level in RNNPipeline.py because the RNN models are tiny (single-layer, hidden_size=64) and cuDNN kernel overhead provides no benefit while causing crashes on some GPU architectures.
+- **`app.py`** — Added "🧠 Baselines vs MMF" tab (tab 13) with GPU selector, comparison display, and "Run All" integration.

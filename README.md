@@ -72,8 +72,9 @@ T_IL-Celomics-7-C/
 │   └── TASC2.4/                  # Jupyter notebook version
 └── T_IL-Celomics-5-C/            # Foundation-model analysis pipeline
     ├── T_IL-Cellomics-5-C_streamlit/ # Streamlit GUI for full pipeline
-    │   ├── app.py                # Main Streamlit app (13-tab interface)
+    │   ├── app.py                # Main Streamlit app (14-tab interface)
     │   ├── many-model-forecasting/ # Adapted MMF framework
+    │   ├── morphokinetic_endpoints/ # 13 standalone dose-response analysis scripts
     │   └── ...                   # 20+ pipeline scripts
     └── T_IL-Cellomics-5-C/       # Original scripts & data outputs
 ```
@@ -166,7 +167,7 @@ TASC.bat                           # or: streamlit run TASC_GUI.py
 
 The most advanced component of the project: a **GPU-accelerated analysis pipeline** that uses **foundation time-series models** (transformers) to embed, forecast, and cluster single-cell motility data. It investigates BRCA1-knockout breast cancer cells and compares foundation model representations against traditional curve-fitting approaches.
 
-This module is delivered as a **Streamlit web application** (`app.py`) with a 13-tab interface that orchestrates 14 pipeline stages — no coding required.
+This module is delivered as a **Streamlit web application** (`app.py`) with a 14-tab interface that orchestrates 15 pipeline stages — no coding required.
 
 #### Pipeline Stages
 
@@ -180,7 +181,8 @@ Step 5: Curve Fitting             → 12 mathematical models per cell-feature tr
 Step 6: Unsupervised Clustering  → K-Means with silhouette sweep (k=2–10), dose analysis
 Step 7: ANOVA                    → One-way ANOVA per feature across clusters
 Step 8: Descriptive Statistics   → Mean, Std, SE, 95% CI per cluster
-Step 9: Baseline Comparison      → MMF vs LSTM, GRU, DLinear, Autoformer baselines
+Step 9: Two-Way ANOVA            → Dynamic clustering vs static (mean-based) clustering
+Step 10: Baseline Comparison     → MMF vs LSTM, GRU, DLinear, Autoformer baselines
 ```
 
 Steps 6–8 run in **two parallel branches**:
@@ -238,9 +240,32 @@ Performance is evaluated via accuracy, confusion matrices, and per-cluster preci
 
 #### Two-Way ANOVA & Cross-Project Validation
 
-- Compares current project's clusters against a previous project's static (mean-based) clusters
-- Two-way ANOVA (Method × Cluster) with Tukey HSD post-hoc tests and FDR correction
+- Compares current project’s dynamic clusters (embedding-based and embedding+fitting) against a previous project’s static (mean-based) clusters
+- Two-way ANOVA (Method × Cluster) with Tukey HSD post-hoc tests and Benjamini-Hochberg FDR correction
 - Z-score heatmaps split by morphological vs. kinetic feature categories
+- Reports Method main effect, Cluster main effect, and Method × Cluster interaction p-values
+
+#### Morphokinetic Endpoints (Standalone Module)
+
+A standalone analysis package (`morphokinetic_endpoints/`) with 13 scripts for dose-response characterization:
+
+| # | Script | Analysis |
+|---|--------|----------|
+| 01 | `01_make_dose_categories.py` | Dose categorization from raw metadata |
+| 02 | `02_make_dose_combo.py` | Dose-combination label creation |
+| 03 | `03_track_level_summary.py` | Per-track summary statistics |
+| 04 | `04_cluster_kmeans_pca.py` | K-Means + PCA clustering |
+| 05 | `05_cluster_differential_abundance.py` | Differential abundance testing |
+| 06 | `06_state_transition_rate.py` | State transition rate analysis |
+| 07 | `07_distribution_shift_distances.py` | Wasserstein, KS, energy distances |
+| 08 | `08_dispersion_tests.py` | Levene’s dispersion tests |
+| 09 | `09_mean_pc_shift_bootstrap.py` | Bootstrap mean PC shift |
+| 10 | `10_feature_effect_sizes_fdr.py` | Effect sizes with FDR (volcano plots) |
+| 11 | `11_curve_fitting_10_models.py` | Curve fitting (10 models) |
+| 12 | `12_forecast_predictability.py` | Forecast predictability |
+| 13 | `13_nested_groupcv_discriminability.py` | Nested group-CV discriminability |
+
+Driven by `dose_morphokinetic_endpoints.ipynb` (Jupyter/Colab). Not integrated into the Streamlit app.
 
 #### Quick Start
 
@@ -271,6 +296,7 @@ streamlit run app.py
 | ANOVA | `clustering/` | `ANOVA - OneWay_k*.xlsx` |
 | Descriptive Stats | `clustering/` | `Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx` |
 | Emb+Fit branch | `fitting/` | `embedding_fitting_*.csv`, `embedding_fitting_*.xlsx` |
+| Two-Way ANOVA | `results/` | `two_way_anova_emb_vs_static_k*.xlsx`, `two_way_anova_embfit_vs_static_k*.xlsx` |
 | Baseline Comparison | `baseline/` | `baseline_comparison.csv`, `baseline_comparison_summary.txt` |
 
 ---
