@@ -1,83 +1,146 @@
-# Active Tunnel (Future / Production-Ready)
+# Active Tunnel (Cell-ACDC → Imaris-like Excel)
 
-This folder will contain the **stable, production-ready version** of the “Imaris ↔ Cell-ACDC tunnel” after we finish the optimization stage.
+This folder contains the **production pipeline** (“active tunnel”) used in the project.
+It runs end-to-end from **raw microscopy exports** → **Cell-ACDC segmentation + tracking** → **Imaris-like Excel export**.
 
-Right now, all development happens in:
-
-* `../optimization/`
-
-When the logic becomes reliable, we will move only the **clean + tested** parts here.
+✅ Includes only pipeline scripts (no validation / no plotting / no notebooks).
 
 ---
 
-## What “Active Tunnel” will do (planned)
+## Folder structure
 
-### 1) Input (from the pipeline)
-
-* **Cell-ACDC output CSV** (segmentation + tracking + features)
-* **Crosswalk CSV** (mapping + formulas)
-* Optional: configuration file (channel name, units, time offset, etc.)
-
-### 2) Processing
-
-* **Pass 1:** map ACDC columns → Imaris-like parameters using the crosswalk
-* **Pass 2:** compute derived metrics that require full tracks/time-series:
-
-  * Track Length / Duration
-  * Track Displacement (X/Y/Z + total)
-  * Track Speed (mean/min/max)
-  * Track Velocity (mean/min/max)
-  * Straightness
-  * Other parameters that Imaris reports but ACDC doesn’t provide directly
-
-### 3) Output (for downstream usage)
-
-* An **Imaris-like Excel workbook** (`.xlsx`) with:
-
-  * the same sheet structure and headers as Imaris statistics export
-  * filled values wherever possible
-  * a report sheet showing what was computed vs missing
+```text
+active_tunnel/
+├─ README.md
+├─ requirements.txt
+├─ .gitignore
+├─ scripts/
+│  ├─ 01_rename_to_acdc_input.py
+│  ├─ 02_build_segmentation_input.py
+│  ├─ 03_run_segm_track_from_map.py
+│  ├─ 04_filter_acdc_output_by_tracklen.py          (optional)
+│  ├─ 05_export_imaris_like_from_pipeline.py
+│  └─ 06_acdc_npz_tif_to_imaris_like.py             (converter)
+├─ inis/
+│  ├─ acdc_segm_track_workflow_NIR.ini
+│  ├─ acdc_segm_track_workflow_GREEN.ini
+│  └─ acdc_segm_track_workflow_ORANGE.ini
+└─ tools/
+   ├─ patch_trackpy_cli.py                          (optional CLI fix for TrackPy)
+   └─ conda_env/                                    (environment export files)
+```
 
 ---
 
-## What will be included here (when ready)
+## Data layout expected by the pipeline
 
-* A single main script (or small module) that is:
+### After step 02 (segmentation input)
+The pipeline produces:
 
-  * minimal dependencies
-  * stable CLI interface
-  * well tested on multiple experiments
-* A “final” crosswalk template + documentation
-* Clear logging + error handling
-* Unit handling and consistent naming conventions
-* Optional: integration hooks for the full project pipeline (the “full solution”)
+```text
+segmentation_input/
+├─ position_map.csv
+├─ Position_1/
+│  └─ Images/
+│     ├─ <signal>.tif
+│     └─ <metadata>.csv
+├─ Position_2/
+│  └─ Images/
+│     ├─ <signal>.tif
+│     └─ <metadata>.csv
+...
+```
 
----
-
-## What will NOT be included here
-
-* experimental scripts
-* messy crosswalk drafts
-* temporary debugging notebooks/files
-* incomplete mapping attempts
-
-Those stay in:
-
-* `../optimization/`
+`position_map.csv` is the key index used by later steps to select specific experiments.
 
 ---
 
-## Planned checklist before moving to Active Tunnel
+## Step-by-step usage (end-to-end)
 
-* [ ] Crosswalk format finalized (columns + naming conventions)
-* [ ] All key Imaris sheets filled (or clearly explained why not)
-* [ ] Auto-derived track metrics validated vs Imaris on real data
-* [ ] Reproducible run instructions tested on Windows + Linux
-* [ ] Clear “known limitations” documented
-* [ ] Test dataset + expected output (small sample) added
+### 1) Rename lab export → ACDC naming
+```bash
+python scripts/01_rename_to_acdc_input.py Phase3
+```
+
+Output example:
+```text
+ACDC_IN_Phase3/field1/B3_1/NIR/Images/field1_B3_NIR_0.tif ... field1_B3_NIR_47.tif
+```
 
 ---
 
-## Status
+### 2) Build `segmentation_input/` + `position_map.csv` (GUI replacement)
+```bash
+python scripts/02_build_segmentation_input.py --in_root ACDC_IN_Phase3 --out_root segmentation_input
+```
 
-**Not implemented yet** — this folder is a placeholder for the final version after optimization is done.
+---
+
+### 3) Run segmentation + tracking (CLI) using per-channel INI
+Run a single selection:
+```bash
+python scripts/03_run_segm_track_from_map.py --exp_root segmentation_input --ini_dir inis --select field1_B3_1_NIR
+```
+
+Run all:
+```bash
+python scripts/03_run_segm_track_from_map.py --exp_root segmentation_input --ini_dir inis --all
+```
+
+Outputs are written by Cell-ACDC into each `Position_X/Images/`, e.g.:
+- `*_segm.npz`
+- `*_acdc_output.csv`
+- tracked outputs (depends on workflow)
+
+---
+
+### 4) (Optional) Filter short tracks in `*_acdc_output.csv`
+This step is optional and designed to be “plug-and-play” in the pipeline.
+
+```bash
+python scripts/04_filter_acdc_output_by_tracklen.py --exp_root segmentation_input --select field1_B3_1_NIR --min_frames 15
+```
+
+Behavior:
+- creates backup: `*_acdc_output.original.csv`
+- overwrites `*_acdc_output.csv` with filtered rows
+
+---
+
+### 5) Export Imaris-like Excel from the pipeline outputs
+```bash
+python scripts/05_export_imaris_like_from_pipeline.py ^
+  --exp_root segmentation_input ^
+  --out_dir pipeline_output ^
+  --select field1_B3_1_NIR ^
+  --pixel-size-um 0.108 ^
+  --z-step-um 1.0 ^
+  --frame-interval-s 3600
+```
+
+Output example:
+```text
+pipeline_output/field1_B3_1_NIR__Position_2_imaris_like.xlsx
+```
+
+IMPORTANT:
+- If `*_acdc_output.csv` exists, the converter exports **ONLY** objects mapped to IDs in that CSV.
+  This means if you filtered the CSV (step 04), filtered IDs will NOT appear in the Excel.
+
+---
+
+## Troubleshooting
+
+### TrackPy CLI crash (progressbar signals)
+If tracking crashes in CLI with errors like:
+`KernelCliSignals ... initProgressBar`
+use:
+```bash
+python tools/patch_trackpy_cli.py
+```
+
+---
+
+## Notes
+- All paths are relative; run commands from inside `active_tunnel/`.
+- For Windows CMD users, use `^` for line continuation (as shown above).
