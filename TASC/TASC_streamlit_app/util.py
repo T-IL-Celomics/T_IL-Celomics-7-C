@@ -1145,7 +1145,7 @@ def ANOVE_DESC_TABLE(dataSpecGraphGroups, Features, title,f, dep='Groups', group
             ANOVA_Desc_df.loc[par, 'Groups'] = gb_Groups.values.ravel()
         st.dataframe(ANOVA_Desc_df)
         f.write(ANOVA_Desc_df.to_html(index=True))
-        ANOVA_Desc_df.to_csv(title + ' ANOVA + Descriptive Table - ' + dep + '.csv')
+        ANOVA_Desc_df.to_excel(title + ' ANOVA + Descriptive Table - ' + dep + '.xlsx', engine='openpyxl')
     return ANOVA_Desc_df
 
 
@@ -1180,7 +1180,7 @@ def ANOVA_TABLE(dataSpecGraphGroups, Features,f, title='', dep='Groups'):
             ano.rename(index={'C('+dep+')': "Between "+dep, 'Residual': 'Within '+dep}, inplace=True)
             ANOVA_df.loc[par, :] = ano.values.ravel()
         ANOVA_df.dropna(axis=1, inplace=True)
-        ANOVA_df.to_csv(title + ' ANOVA Table - ' + dep + '.csv')
+        ANOVA_df.to_excel(title + ' ANOVA Table - ' + dep + '.xlsx', engine='openpyxl')
         st.dataframe(ANOVA_df)
         f.write(ANOVA_df.to_html(index=True))
     return

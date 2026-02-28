@@ -446,9 +446,14 @@ def get_all_parents(imaris_df, dimensions, dt, imaris_file, get_intensity=False,
     cell_nums = imaris_df["Acceleration"]["Parent"].unique().tolist()
     FIRST_PARENT = cell_nums[0]
     skipped_cells = 0
+    total_cells = len(cell_nums)
     #Get most info
-    for parent_id in cell_nums:
+    for cell_idx, parent_id in enumerate(cell_nums):
         try:
+            if (cell_idx + 1) % 50 == 0 or cell_idx == 0:
+                import sys
+                print("Processing cell %d / %d (parent_id=%d)..." % (cell_idx + 1, total_cells, parent_id))
+                sys.stdout.flush()
             parent = Cell_Info(imaris_df, parent_id, dimensions, dt, imaris_file, skip_limit, get_intensity)
             parent.get_parent_info()
             parent.get_info_per_id()
@@ -464,12 +469,17 @@ def get_all_parents(imaris_df, dimensions, dt, imaris_file, get_intensity=False,
             skipped_cells += 1
             continue
     if skipped_cells > 0:
-        print("Skipped %d cells out of %d due to NaN/invalid data." % (skipped_cells, len(cell_nums)))
+        print("Skipped %d cells out of %d due to NaN/invalid data." % (skipped_cells, total_cells))
     return all_parents, all_time_ids
 
 
 def calculate_collectivity_distance(all_parents, all_time_ids):
-    for time_index in all_time_ids:
+    import sys
+    total_times = len(all_time_ids)
+    for t_idx, time_index in enumerate(all_time_ids):
+        if (t_idx + 1) % 100 == 0 or t_idx == 0:
+            print("Collectivity: time index %d / %d..." % (t_idx + 1, total_times))
+            sys.stdout.flush()
         same_time_ids = []
         for parent in all_parents:
             for i in range(len(parent.info_per_id)):

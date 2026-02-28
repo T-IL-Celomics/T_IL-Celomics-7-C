@@ -164,7 +164,8 @@ SCRIPTS = {
         "description": "Combine embedding vectors + fitting parameters, then PCA + K-Means with silhouette sweep & dose analysis",
         "outputs": ["fitting/embedding_fitting_combined_by_feature_scaled.json",
                     "fitting/embedding_fitting_PCA_KMeans_k*.png",
-                    "fitting/embedding_fitting_PCA_KMeans_by_Treatment_k*.png"]
+                    "fitting/embedding_fitting_PCA_KMeans_by_Treatment_k*.png",
+                    "fitting/embedding_fitting_cluster_assignments_k*.csv"]
     },
     "embfit_anova": {
         "file": "embedding_fitting_anova.py",
@@ -177,6 +178,13 @@ SCRIPTS = {
         "name": "Emb+Fit Descriptive Stats",
         "description": "Mean, Std, SE, CI per cluster for embedding+fitting merged data",
         "outputs": ["fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"]
+    },
+    "two_way_anova": {
+        "file": "two_way_anova.py",
+        "name": "Two-Way ANOVA",
+        "description": "Runs two separate two-way ANOVAs (Method × Cluster) per feature with FDR correction: (1) Embedding clustering vs Static clustering, and (2) Embedding+Fitting clustering vs Static clustering. Shows whether the clustering method, cluster assignment, or their interaction significantly affects each measurement.",
+        "outputs": ["results/two_way_anova_emb_vs_static_k*.xlsx", "results/two_way_anova_emb_vs_static_k*.csv",
+                    "results/two_way_anova_embfit_vs_static_k*.xlsx", "results/two_way_anova_embfit_vs_static_k*.csv"]
     },
     "dose_summary": {
         "file": "build_dose_summary.py",
@@ -357,6 +365,7 @@ def _stage_outputs() -> dict:
         "embfit_clustering":  ["fitting/embedding_fitting_Merged_Clusters_PCA_k*"],
         "embfit_anova":       ["fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx"],
         "embfit_descriptive": ["fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx"],
+        "two_way_anova":    ["results/two_way_anova_emb_vs_static_k*.xlsx"],
         "dose_summary":     ["cell_data/dose_dependency_summary_all_wells.csv"],
         "baseline_comparison":   ["baseline/baseline_comparison.csv", "baseline/baseline_comparison.json"],
     }
@@ -370,12 +379,13 @@ DOWNSTREAM_MAP = {
     "embedding":          ["clustering", "embfit_clustering"],
     "embedding_multi_gpu":["clustering", "embfit_clustering"],
     "fitting":            ["embfit_clustering"],
-    "clustering":         ["anova", "descriptive"],
-    "embfit_clustering":  ["embfit_anova", "embfit_descriptive"],
+    "clustering":         ["anova", "descriptive", "two_way_anova"],
+    "embfit_clustering":  ["embfit_anova", "embfit_descriptive", "two_way_anova"],
     "anova":              [],
     "descriptive":        [],
     "embfit_anova":       [],
     "embfit_descriptive": [],
+    "two_way_anova":      [],
     "dose_summary":       ["clustering", "embfit_clustering"],
     "baseline_comparison":     [],
 }
@@ -395,8 +405,9 @@ STAGE_LABELS = {
     "embfit_clustering":  "Step 6b · Emb+Fit Clustering",
     "embfit_anova":       "Step 7b · Emb+Fit ANOVA",
     "embfit_descriptive": "Step 8b · Emb+Fit Descriptive",
+    "two_way_anova":      "Step 9 · Two-Way ANOVA",
     "dose_summary":       "Step 0 · Dose Extraction",
-    "baseline_comparison":     "Step 9 · Baseline Comparison",
+    "baseline_comparison":     "Step 10 · Baseline Comparison",
 }
 
 # Maps each pipeline stage to glob patterns for its output figures
@@ -419,18 +430,32 @@ STAGE_FIGURE_PATTERNS: dict[str, list[str]] = {
         "figures/heatmap_best_model_*.png",
         "figures/sunburst_*.png",
         "figures/sunburst_*.html",
+        "fitting/best_model_by_treatment.png",
+        "fitting/best_model_by_dose_*.png",
     ],
     "clustering":         [
         "clustering/*.png",
+        "clustering/cluster_barplot_by_dose_k*.png",
+        "clustering/cluster_barplot_by_treatment_k*.png",
+        "clustering/mean_features_normalized_k*.png",
     ],
     "anova":              [],
     "descriptive":        [],
     "embfit_clustering":  [
         "fitting/embedding_fitting_PCA_KMeans*.png",
+        "fitting/embedding_fitting_silhouette*.png",
         "fitting/cluster_vs_dose_heatmap*.png",
+        "fitting/embedding_fitting_PCA_KMeans*_by_dose.png",
+        "fitting/cluster_barplot_by_dose_k*.png",
+        "fitting/cluster_barplot_by_treatment_k*.png",
+        "fitting/mean_features_normalized_k*.png",
     ],
     "embfit_anova":       [],
     "embfit_descriptive": [],
+    "two_way_anova":      [
+        "results/two_way_anova_*_zscore_heatmap_*.png",
+        "results/two_way_anova_*_tukey_heatmap_*.png",
+    ],
     "dose_summary":       [],
     "baseline_comparison":     [],
 }
@@ -589,6 +614,12 @@ def get_pipeline_env(script_key: str) -> dict:
         _csv = _find_best_k_file("fitting", "embedding_fitting_Merged_Clusters_PCA")
         env["PIPELINE_EMBFIT_CLUSTERS_CSV"] = _csv or str(SCRIPT_DIR / "fitting" / "embedding_fitting_Merged_Clusters_PCA.csv")
         env["PIPELINE_CI_ZSCORE"]    = str(st.session_state.get("param_ci_zscore", 1.96))
+    elif script_key == "two_way_anova":
+        env["PIPELINE_EMB_CLUSTER_DIR"]    = str(SCRIPT_DIR / "clustering")
+        env["PIPELINE_EMBFIT_CLUSTER_DIR"] = str(SCRIPT_DIR / "fitting")
+        env["PIPELINE_STATIC_CSV"]         = str(SCRIPT_DIR / "cell_data" / "static_clustering_raw_data.csv")
+        env["PIPELINE_TWOWAY_OUTPUT_DIR"]  = str(SCRIPT_DIR / "results")
+        env["PIPELINE_ANOVA_PVAL"]         = str(st.session_state.get("param_anova_pval", 0.05))
     elif script_key == "dose_summary":
         dose_dir = st.session_state.get("param_dose_dir", "").strip()
         if dose_dir:
@@ -650,6 +681,13 @@ def check_pipeline_deps(script_key: str) -> tuple:
     elif script_key in ("embfit_anova", "embfit_descriptive"):
         if not _find_best_k_file("fitting", "embedding_fitting_Merged_Clusters_PCA"):
             missing.append("fitting/embedding_fitting_Merged_Clusters_PCA_k*.csv — run **Step 6b · Emb+Fit Clustering** first")
+    elif script_key == "two_way_anova":
+        if not _find_best_k_file("clustering", "Merged_Clusters_PCA"):
+            missing.append("clustering/Merged_Clusters_PCA_k*.csv — run **Step 6 · Clustering** first")
+        _static = SCRIPT_DIR / "cell_data" / "static_clustering_raw_data.csv"
+        if not _static.exists():
+            missing.append("cell_data/static_clustering_raw_data.csv — place the static (mean-based) clustering CSV in cell_data/")
+        # Emb+Fit files are optional — not added to missing so they don't block the Run button
     elif script_key == "dose_summary":
         # Dose summary only needs the input Excel files — validated at runtime
         pass
@@ -691,6 +729,7 @@ def get_skip_enable_key(script_key: str) -> str:
         "embfit_clustering": "enable_embfit_clustering",
         "embfit_anova": "enable_embfit_anova",
         "embfit_descriptive": "enable_embfit_descriptive",
+        "two_way_anova": "enable_two_way_anova",
         "dose_summary": "enable_dose_summary",
         "baseline_comparison": "enable_baseline_comparison",
     }
@@ -862,6 +901,10 @@ enable_embfit_anova = st.sidebar.checkbox("📊 Emb+Fit ANOVA", value=True)
 enable_embfit_descriptive = st.sidebar.checkbox("📋 Emb+Fit Descriptive", value=True)
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("Cross-Analysis")
+enable_two_way_anova = st.sidebar.checkbox("📊 Two-Way ANOVA (Dynamic vs Static)", value=True)
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("Dose Extraction")
 enable_dose_summary = st.sidebar.checkbox("💊 Dose Extraction Summary", value=True)
 
@@ -964,8 +1007,10 @@ with st.expander("📊 Pipeline Intermediate Files"):
         "fitting/embedding_fitting_Merged_Clusters_PCA_k*": "Step 6b → Emb+Fit Clustering",
         "fitting/embedding_fitting_ANOVA - OneWay_k*.xlsx":    "Step 7b → Emb+Fit ANOVA",
         "fitting/embedding_fitting_Descriptive_Table_By_Cluster_UniqueCells_k*.xlsx": "Step 8b → Emb+Fit Descriptive",
+        "results/two_way_anova_emb_vs_static_k*.xlsx":              "Step 9 → Emb vs Static ANOVA",
+        "results/two_way_anova_embfit_vs_static_k*.xlsx":           "Step 9 → Emb+Fit vs Static ANOVA",
         "cell_data/dose_dependency_summary_all_wells.csv":     "Step 0 → Dose Extraction",
-        "baseline/baseline_comparison.csv":                     "Step 9 → Baseline Comparison",
+        "baseline/baseline_comparison.csv":                     "Step 10 → Baseline Comparison",
     }
     _cols = st.columns(3)
     for _i, (_fname, _step) in enumerate(_pipeline_files.items()):
@@ -997,6 +1042,7 @@ _PIPELINE_ORDER = [
     ("embfit_clustering",  enable_embfit_clustering),
     ("embfit_anova",       enable_embfit_anova),
     ("embfit_descriptive", enable_embfit_descriptive),
+    ("two_way_anova",      enable_two_way_anova),
     ("baseline_comparison",     enable_baseline_comparison),
 ]
 
@@ -1114,6 +1160,7 @@ tabs = st.tabs([
     "🔗 Emb+Fit Cluster",
     "📊 Emb+Fit ANOVA",
     "📋 Emb+Fit Desc",
+    "📊 Two-Way ANOVA",
     "🧠 Baselines vs MMF"
 ])
 
@@ -2245,13 +2292,37 @@ with tabs[9]:
             if existing_outputs:
                 st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
 
-                # Show cluster assignments CSVs
+                # Show cluster assignments CSVs (matching regular clustering display)
                 fitting_dir = SCRIPT_DIR / "fitting"
                 if fitting_dir.exists():
+                    for csv_file in sorted(fitting_dir.glob("embedding_fitting_cluster_assignments_k*.csv")):
+                        with st.expander(f"📊 {csv_file.name}"):
+                            df = pd.read_csv(csv_file, nrows=100)
+                            st.dataframe(df, width='stretch')
+
+                            # Cluster distribution
+                            if 'Cluster' in df.columns:
+                                fig, ax = plt.subplots()
+                                df['Cluster'].value_counts().plot(kind='bar', ax=ax)
+                                ax.set_xlabel('Cluster')
+                                ax.set_ylabel('Count')
+                                ax.set_title('Cluster Distribution')
+                                st.pyplot(fig)
+
+                    # Also show merged CSVs
                     for csv_file in sorted(fitting_dir.glob("embedding_fitting_Merged_Clusters_PCA_k*.csv")):
                         with st.expander(f"📊 {csv_file.name}"):
                             df = pd.read_csv(csv_file, nrows=100)
                             st.dataframe(df, width='stretch')
+
+                    # Show per-treatment cluster vs dose CSVs
+                    dose_csvs = sorted(fitting_dir.glob("cluster_vs_dose_k*.csv"))
+                    if dose_csvs:
+                        st.subheader("📋 Cluster vs Dose per Treatment")
+                        for csv_file in dose_csvs:
+                            with st.expander(f"📊 {csv_file.name}"):
+                                df = pd.read_csv(csv_file)
+                                st.dataframe(df, width='stretch')
             
             # Stage parameters (shared with Clustering tab)
             with st.expander("⚙️ Emb+Fit Clustering Parameters", expanded=False):
@@ -2453,8 +2524,133 @@ with tabs[11]:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-# ===== TAB 12: BASELINE COMPARISON =====
+# ===== TAB 12: TWO-WAY ANOVA =====
 with tabs[12]:
+    st.header("📊 Two-Way ANOVA — Dynamic vs Static Clustering")
+    info = SCRIPTS['two_way_anova']
+    st.markdown(f"**Script:** `{info['file']}`")
+    st.info(info['description'])
+
+    if not enable_two_way_anova:
+        show_skip_status('two_way_anova')
+    else:
+        icon, exists = check_script_exists('two_way_anova')
+
+        if not exists:
+            st.error(f"❌ Script not found: {info['file']}")
+        else:
+            with st.expander("📜 View Script Source Code"):
+                with open(SCRIPT_DIR / info['file'], 'r', encoding='utf-8') as f:
+                    st.code(f.read(), language='python', line_numbers=True)
+
+            existing_outputs = check_outputs('two_way_anova')
+            if existing_outputs:
+                st.success(f"✅ Existing outputs: {', '.join(existing_outputs)}")
+
+                # --- Comparison 1: Embedding vs Static ---
+                st.subheader("🔹 Embedding vs Static Clustering")
+                _emb_files = sorted(SCRIPT_DIR.glob("results/two_way_anova_emb_vs_static_k*.xlsx"))
+                if _emb_files:
+                    for _tf in _emb_files:
+                        st.markdown(f"**{_tf.name}**")
+                        try:
+                            df = pd.read_excel(_tf)
+                            st.dataframe(df, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Error reading {_tf.name}: {e}")
+                else:
+                    st.info("No Embedding vs Static results yet.")
+
+                _emb_csvs = sorted(SCRIPT_DIR.glob("results/two_way_anova_emb_vs_static_k*.csv"))
+                for _tc in _emb_csvs:
+                    with st.expander(f"📥 Download {_tc.name}"):
+                        csv_data = _tc.read_text()
+                        st.download_button(
+                            label=f"Download {_tc.name}",
+                            data=csv_data,
+                            file_name=_tc.name,
+                            mime="text/csv",
+                            key=f"dl_{_tc.stem}"
+                        )
+
+                _emb_heatmaps = sorted(SCRIPT_DIR.glob("results/two_way_anova_emb_vs_static_k*_zscore_heatmap.png"))
+                for _hp in _emb_heatmaps:
+                    st.image(str(_hp), caption=_hp.name, use_container_width=True)
+
+                _emb_tukey = sorted(SCRIPT_DIR.glob("results/two_way_anova_emb_vs_static_k*_tukey_heatmap.png"))
+                for _hp in _emb_tukey:
+                    st.image(str(_hp), caption=_hp.name, use_container_width=True)
+
+                # --- Comparison 2: Embedding+Fitting vs Static ---
+                st.subheader("🔸 Embedding+Fitting vs Static Clustering")
+                _fit_files = sorted(SCRIPT_DIR.glob("results/two_way_anova_embfit_vs_static_k*.xlsx"))
+                if _fit_files:
+                    for _tf in _fit_files:
+                        st.markdown(f"**{_tf.name}**")
+                        try:
+                            df = pd.read_excel(_tf)
+                            st.dataframe(df, use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Error reading {_tf.name}: {e}")
+                else:
+                    st.info("No Embedding+Fitting vs Static results yet. Run Step 6b (Emb+Fit Clustering) first.")
+
+                _fit_csvs = sorted(SCRIPT_DIR.glob("results/two_way_anova_embfit_vs_static_k*.csv"))
+                for _tc in _fit_csvs:
+                    with st.expander(f"📥 Download {_tc.name}"):
+                        csv_data = _tc.read_text()
+                        st.download_button(
+                            label=f"Download {_tc.name}",
+                            data=csv_data,
+                            file_name=_tc.name,
+                            mime="text/csv",
+                            key=f"dl_{_tc.stem}"
+                        )
+
+                _fit_heatmaps = sorted(SCRIPT_DIR.glob("results/two_way_anova_embfit_vs_static_k*_zscore_heatmap.png"))
+                for _hp in _fit_heatmaps:
+                    st.image(str(_hp), caption=_hp.name, use_container_width=True)
+
+                _fit_tukey = sorted(SCRIPT_DIR.glob("results/two_way_anova_embfit_vs_static_k*_tukey_heatmap.png"))
+                for _hp in _fit_tukey:
+                    st.image(str(_hp), caption=_hp.name, use_container_width=True)
+
+            # Stage parameters
+            with st.expander("⚙️ Two-Way ANOVA Parameters", expanded=False):
+                st.session_state.param_anova_pval = st.number_input(
+                    "P-value highlight threshold", value=st.session_state.param_anova_pval,
+                    min_value=0.001, max_value=0.50, step=0.01, format="%.3f", key="tw_anova_pval",
+                    help="P-values below this threshold are highlighted in blue in the Excel output")
+
+            # Pipeline dependency check
+            deps_ok = show_dependency_status('two_way_anova')
+
+            _rc, _sc = st.columns([3, 1])
+            with _rc:
+                _clicked = st.button("📊 Run Two-Way ANOVA", type="primary", key="run_two_way_anova", disabled=not deps_ok)
+            with _sc:
+                st.button("🛑 Stop", on_click=_request_stop, key="stop_two_way_anova")
+            if _clicked:
+                with st.spinner(f"Running {info['file']}..."):
+                    try:
+                        returncode, stdout, stderr = run_script(info['file'], env_vars=get_pipeline_env('two_way_anova'))
+
+                        if returncode == 0:
+                            st.success("✅ Completed!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Failed (code {returncode})")
+
+                        with st.expander("📤 Output", expanded=True):
+                            if stdout:
+                                st.text(stdout)
+                            if stderr:
+                                st.error(stderr)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+# ===== TAB 13: BASELINE COMPARISON =====
+with tabs[13]:
     st.header("🧠 Baselines vs MMF — Comparison")
     info = SCRIPTS['baseline_comparison']
     st.markdown(f"**Script:** `{info['file']}`")
@@ -2652,7 +2848,8 @@ This Streamlit app **runs the existing Python scripts** in the directory:
 | 7b | `embedding_fitting_anova.py` | One-way ANOVA (embedding + fitting) |
 | 8 | `descriptive_table_by_cluster.py` | Descriptive statistics |
 | 8b | `embedding_fitting_descriptive_table.py` | Descriptive stats (embedding + fitting) |
-| 9 | `baseline_comparison.py` + `run_baseline_multi_gpu.sh` | Baseline models vs MMF comparison (**1-4 GPU**) |
+| 9 | `two_way_anova.py` | Two-way ANOVA: embedding vs embedding+fitting |
+| 10 | `baseline_comparison.py` + `run_baseline_multi_gpu.sh` | Baseline models vs MMF comparison (**1-4 GPU**) |
 
 **To run:** `streamlit run app.py`
 

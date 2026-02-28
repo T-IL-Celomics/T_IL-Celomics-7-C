@@ -103,7 +103,7 @@ with open(os.environ.get("PIPELINE_EMBEDDING_JSON", "embeddings/summary_table_Em
 with open(os.environ.get("PIPELINE_FITTING_JSON", "fitting/fitting_best_model_log_scaled.json"), "r") as f:
     fitting_data = json.load(f)
 
-_merged_csv = os.environ.get("PIPELINE_MERGED_CSV", "cell_data/MergedAndFilteredExperiment008.csv")
+_merged_csv = os.environ.get("PIPELINE_MERGED_CSV", "cell_data/raw_all_cells.csv")
 if _merged_csv.lower().endswith((".xlsx", ".xls")):
     df_data = pd.read_excel(_merged_csv)
 else:
@@ -232,11 +232,26 @@ print(f"\nBest {_num_best_k} k values: {', '.join(f'{k} ({silhouette_scores[k]:.
 
 # === 11-15. Process both k values ===
 for best_k in best_k_values:
+    print(f"\n{'='*60}")
     print(f"Processing k={best_k}...")
+    print(f"{'='*60}\n")
     
     # KMeans clustering
     kmeans = KMeans(n_clusters=best_k, random_state=_random_state, n_init=_n_init)
     clusters = kmeans.fit_predict(X)
+
+    # Silhouette score per treatment
+    print("Silhouette score per treatment:")
+    for treatment in np.unique([r["Treatment"] for r in records]):
+        idx = np.array([r["Treatment"] == treatment for r in records])
+        if idx.sum() > best_k:
+            try:
+                score = silhouette_score(X[idx], clusters[idx], metric="euclidean")
+                print(f"{treatment}: silhouette = {score:.3f}")
+            except ValueError:
+                print(f"{treatment}: could not compute silhouette")
+        else:
+            print(f"{treatment}: not enough samples")
 
     # Create PCA + cluster DataFrame
     pca_df = pd.DataFrame(X_pca, columns=[f"PC{i+1}" for i in range(X_pca.shape[1])])
@@ -252,6 +267,10 @@ for best_k in best_k_values:
         dose_data["Experiment"] = dose_data["Experiment"].astype(str)
         dose_data["Parent"] = dose_data["Parent"].astype(str)
         pca_df = pca_df.merge(dose_data, on=["Experiment", "Parent"], how="left")
+
+    # Save cluster assignments (like regular clustering)
+    pca_df.to_csv(f"fitting/embedding_fitting_cluster_assignments_k{best_k}.csv", index=False)
+    print(f"Saved embedding_fitting_cluster_assignments_k{best_k}.csv")
 
     # Plot PCA with clusters
     colors = plt.cm.tab10(np.linspace(0, 1, best_k))
@@ -298,6 +317,10 @@ for best_k in best_k_values:
             ax.set_xlabel(f"PC1 ({explained[0]:.1f}%)")
             ax.set_ylabel(f"PC2 ({explained[1]:.1f}%)")
             ax.grid(True)
+
+        # delete unused axes (if grid has extra slots)
+        for j in range(n_t, len(axes)):
+            fig.delaxes(axes[j])
 
         fig.legend(*axes[0].get_legend_handles_labels(), loc="upper right", bbox_to_anchor=(1.1, 1.0))
         plt.suptitle(f"PCA by Treatment (k={best_k})")
@@ -420,6 +443,81 @@ for best_k in best_k_values:
             plt.close()
             print(f"Saved cluster_vs_dose_heatmap_k{best_k}_{treatment}.png\n")
 
+            # --- Barplot: cell distribution (%) per dose ---
+            cluster_cols = [c for c in treatment_contingency.columns]
+            row_totals = treatment_contingency.sum(axis=1)
+            pct = treatment_contingency.div(row_totals, axis=0) * 100
+
+            x_labels = pct.index.tolist()
+            x_pos = np.arange(len(x_labels))
+            n_clusters = len(cluster_cols)
+            bar_w = 0.8 / n_clusters
+            bar_colors = ['red', 'blue', 'green', 'orange', 'purple', 'cyan'][:n_clusters]
+
+            fig_bar, ax_bar = plt.subplots(figsize=(max(8, len(x_labels)*1.8), 5))
+            for ci, cc in enumerate(cluster_cols):
+                offset = (ci - n_clusters/2 + 0.5) * bar_w
+                ax_bar.bar(
+                    x_pos + offset, pct[cc].values,
+                    width=bar_w, label=f"Group {cc}",
+                    color=bar_colors[ci]
+                )
+
+            ax_bar.set_xticks(x_pos)
+            ax_bar.set_xticklabels(x_labels, fontsize=9)
+            ax_bar.set_ylabel("Cell Distribution (%)")
+            ax_bar.set_title(f"Cell Distribution Per Dose – {treatment} (k={best_k})")
+            ax_bar.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=n_clusters, frameon=False)
+            ax_bar.grid(axis='y', linestyle='-', alpha=0.3)
+            ax_bar.set_axisbelow(True)
+            plt.tight_layout()
+            bar_path = f"fitting/cluster_barplot_by_dose_k{best_k}_{treatment}.png"
+            fig_bar.savefig(bar_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Saved {bar_path}")
+
+        # --- Barplot: cell distribution (%) per treatment (no dose) ---
+        all_treatment_counts = {}
+        for treatment in treatments_present:
+            tdata = pca_df[pca_df["Treatment"] == treatment]
+            counts_per_cluster = tdata.groupby("Cluster").size()
+            all_treatment_counts[treatment] = counts_per_cluster
+
+        if all_treatment_counts:
+            df_treat = pd.DataFrame(all_treatment_counts).T.fillna(0).astype(float)
+            df_treat = df_treat[sorted(df_treat.columns)]
+            cluster_cols_t = list(df_treat.columns)
+            row_totals_t = df_treat.sum(axis=1)
+            pct_t = df_treat.div(row_totals_t, axis=0) * 100
+
+            x_labels_t = pct_t.index.tolist()
+            x_pos_t = np.arange(len(x_labels_t))
+            n_cls = len(cluster_cols_t)
+            bw = 0.8 / n_cls
+            bar_colors_t = ['red', 'blue', 'green', 'orange', 'purple', 'cyan'][:n_cls]
+
+            fig_t, ax_t = plt.subplots(figsize=(max(8, len(x_labels_t)*1.8), 5))
+            for ci, cc in enumerate(cluster_cols_t):
+                offset = (ci - n_cls/2 + 0.5) * bw
+                ax_t.bar(
+                    x_pos_t + offset, pct_t[cc].values,
+                    width=bw, label=f"Group {cc}",
+                    color=bar_colors_t[ci]
+                )
+
+            ax_t.set_xticks(x_pos_t)
+            ax_t.set_xticklabels(x_labels_t, fontsize=9)
+            ax_t.set_ylabel("Cell Distribution (%)")
+            ax_t.set_title(f"Cell Distribution Per Treatment (k={best_k})")
+            ax_t.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=n_cls, frameon=False)
+            ax_t.grid(axis='y', linestyle='-', alpha=0.3)
+            ax_t.set_axisbelow(True)
+            plt.tight_layout()
+            treat_bar_path = f"fitting/cluster_barplot_by_treatment_k{best_k}.png"
+            fig_t.savefig(treat_bar_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Saved {treat_bar_path}")
+
     # Merge with original experiment data
     df_data_copy = df_data.copy()
     df_data_copy["Experiment"] = df_data_copy["Experiment"].astype(str)
@@ -430,6 +528,91 @@ for best_k in best_k_values:
     merged = pd.merge(df_data_copy, pca_df, how="left", on=["Experiment", "Parent"])
     merged.to_csv(f"fitting/embedding_fitting_Merged_Clusters_PCA_k{best_k}.csv", index=False)
     print(f"Saved: embedding_fitting_Merged_Clusters_PCA_k{best_k}.csv\n")
+
+    # --- Mean Feature Values by Group (Normalized to Group 0) ---
+    _morphological = [
+        'Area', 'Ellip_Ax_B_X', 'Ellip_Ax_B_Y', 'Ellip_Ax_C_X', 'Ellip_Ax_C_Y',
+        'EllipsoidAxisLengthB', 'EllipsoidAxisLengthC',
+        'Ellipticity_oblate', 'Ellipticity_prolate', 'Sphericity', 'Eccentricity',
+    ]
+    _non_feature = {
+        'Unnamed: 0', 'TimeIndex', 'x_Pos', 'y_Pos', 'Parent', 'dt', 'ID',
+        'Experiment', 'PC1', 'PC2', 'Cluster', 'Treatment', 'unique_id', 'ds',
+        'DoseLabel', 'Coll', 'Coll_CUBE',
+    }
+    _numeric_cols = merged.select_dtypes(include=[np.number]).columns
+    _all_feats = [c for c in _numeric_cols if c not in _non_feature]
+    _kinetic = [f for f in _all_feats if f not in _morphological]
+    _morph_present = [f for f in _morphological if f in merged.columns]
+    _kin_present = [f for f in _kinetic if f in merged.columns]
+    _mid = len(_kin_present) // 2
+    _feat_groups = [
+        ('Kinetic Features (Part 1)', _kin_present[:_mid]),
+        ('Kinetic Features (Part 2)', _kin_present[_mid:]),
+        ('Morphological Features', _morph_present),
+    ]
+    _feat_groups = [(name, feats) for name, feats in _feat_groups if feats]
+
+    if _feat_groups:
+        _mdf = merged.dropna(subset=['Cluster']).copy()
+        _mdf['Cluster'] = _mdf['Cluster'].astype(int)
+        cluster_ids = sorted(_mdf['Cluster'].unique())
+        means = _mdf.groupby('Cluster')[_all_feats].mean()
+        if 0 in cluster_ids and len(cluster_ids) >= 2:
+            # Use absolute values so ratio is always positive
+            abs_means = means.abs()
+            g0_abs = abs_means.loc[0].replace(0, np.nan)
+            normed_means = abs_means.div(g0_abs, axis=1) * 100
+
+            bar_colors = ['red', 'blue', 'green', 'orange', 'purple', 'cyan']
+            colors = bar_colors[:len(cluster_ids)]
+
+            n_panels = len(_feat_groups)
+            fig, axes = plt.subplots(n_panels, 1,
+                                      figsize=(max(16, max(len(fg[1]) for fg in _feat_groups) * 0.8), 5.0 * n_panels),
+                                      constrained_layout=True)
+            if n_panels == 1:
+                axes = [axes]
+
+            fig.suptitle(f'Mean Feature Values by Group (Normalized to Group 0, k={best_k})',
+                         fontsize=14, fontweight='bold', y=1.02)
+            legend_handles = [plt.Rectangle((0, 0), 1, 1, color=colors[i]) for i in range(len(cluster_ids))]
+            legend_labels = [f'G{c}/G0' for c in cluster_ids]
+            fig.legend(legend_handles, legend_labels, loc='upper center',
+                       ncol=len(cluster_ids), frameon=False, fontsize=10,
+                       bbox_to_anchor=(0.5, 1.01))
+
+            for ax, (panel_title, feats) in zip(axes, _feat_groups):
+                x_pos = np.arange(len(feats))
+                nc = len(cluster_ids)
+                bw = 0.8 / nc
+                panel_max = 0
+                for ci, cid in enumerate(cluster_ids):
+                    vals = normed_means.loc[cid, feats].values.astype(float)
+                    panel_max = max(panel_max, np.nanmax(vals))
+                    offset = (ci - nc / 2 + 0.5) * bw
+                    bars = ax.bar(x_pos + offset, vals, width=bw,
+                                  color=colors[ci])
+                    for bar_rect, raw_v in zip(bars, vals):
+                        ax.text(bar_rect.get_x() + bar_rect.get_width() / 2,
+                                raw_v, f'{raw_v:.0f}',
+                                ha='center', va='bottom', fontsize=5,
+                                color=colors[ci], fontweight='bold')
+
+                _pad = max(panel_max * 0.15, 20)
+                ax.set_ylim(0, panel_max + _pad)
+                ax.axhline(y=100, color='black', linewidth=0.8, linestyle='--', alpha=0.5)
+                ax.set_xticks(x_pos)
+                ax.set_xticklabels(feats, rotation=45, ha='right', fontsize=7)
+                ax.set_ylabel('Normalized to Group 0 (%)')
+                ax.set_title(panel_title, fontsize=11)
+                ax.grid(axis='y', linestyle='-', alpha=0.3)
+                ax.set_axisbelow(True)
+
+            out_path = f'fitting/mean_features_normalized_k{best_k}.png'
+            fig.savefig(out_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f'Saved {out_path}')
 
 # === Generate descriptive tables by cluster ===
 

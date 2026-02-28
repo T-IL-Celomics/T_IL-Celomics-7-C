@@ -832,3 +832,166 @@ cnt = sum(
     if v is None
 )
 print("null entries in JSON:", cnt)
+
+# ========== STEP 8: Stacked Best-Model-per-Feature barplots ==========
+print("\n" + "=" * 60)
+print("Generating stacked best-model barplots per treatment & dose")
+print("=" * 60 + "\n")
+
+_dose_csv_path = os.environ.get(
+    "PIPELINE_DOSE_CSV",
+    os.path.join("cell_data", "dose_dependency_summary_all_wells.csv"),
+)
+_control_channel = os.environ.get("PIPELINE_CONTROL_CHANNEL", "").strip()
+
+def _parse_channels_fit(experiment_id: str) -> list:
+    """Extract 4-char channel codes from experiment ID."""
+    after = str(experiment_id)[22:]
+    noco = after.find("NOCO")
+    if noco < 0:
+        return []
+    return [after[i:i + 4] for i in range(0, noco, 4)]
+
+def _control_cha_col_fit(experiment_id: str, control_name: str) -> str:
+    """Return Cha*_Category column name for the control channel, or ''."""
+    if not control_name:
+        return ""
+    channels = _parse_channels_fit(experiment_id)
+    for i, ch in enumerate(channels):
+        if ch == control_name:
+            return f"Cha{i + 1}_Category"
+    return ""
+
+def _make_dose_label_fit(row, cols):
+    """Build DoseLabel with real channel names, excluding control (NNIR)."""
+    exp_id = str(row["Experiment"])
+    channels = _parse_channels_fit(exp_id)
+    skip = _control_cha_col_fit(exp_id, _control_channel)
+    parts = []
+    for c in cols:
+        if c == skip:
+            continue
+        if pd.notna(row[c]):
+            idx = int(c.replace("Cha", "").replace("_Category", "")) - 1
+            name = channels[idx] if idx < len(channels) else c.replace("_Category", "")
+            parts.append(f"{name}:{row[c]}")
+    return "|".join(parts)
+
+if os.path.exists(_dose_csv_path):
+    _dose_info = pd.read_csv(_dose_csv_path, low_memory=False)
+    _cat_cols = sorted([c for c in _dose_info.columns if c.endswith("_Category")])
+
+    # Keep only needed columns for cell-level merge
+    _dose_merge = _dose_info[["Experiment", "Parent"] + _cat_cols].copy()
+    _dose_merge["DoseLabel"] = _dose_merge.apply(
+        lambda row: _make_dose_label_fit(row, _cat_cols), axis=1
+    )
+
+    df_top1["Treatment"] = df_top1["Experiment"].apply(
+        _extract_treatment_from_experiment_id
+    ).fillna("Unknown")
+
+    # Cell-level merge by (Experiment, Parent) instead of experiment-level groupby
+    df_top1 = df_top1.merge(
+        _dose_merge[["Experiment", "Parent", "DoseLabel"]].drop_duplicates(),
+        on=["Experiment", "Parent"],
+        how="left",
+    )
+    df_top1["DoseLabel"] = df_top1["DoseLabel"].fillna("")
+
+    # Map pure-control treatment (NNIRNOCO) to "Control"
+    df_top1.loc[df_top1["Treatment"] == "NNIRNOCO", "Treatment"] = "Control"
+
+    _ALL_MODELS = [
+        "exponential", "gompertz", "inverse", "linear", "logarithmic",
+        "logistic", "poly3", "poly4", "power", "quadratic", "sigmoid", "weibull",
+    ]
+    _MODEL_COLORS = {
+        "exponential": "#E67E22", "gompertz": "#F1C40F", "inverse": "#2C3E50",
+        "linear": "#C8A2C8", "logarithmic": "#3498DB", "logistic": "#F5CBA7",
+        "poly3": "#E74C3C", "poly4": "#8E44AD", "power": "#2ECC71",
+        "quadratic": "#BDB76B", "sigmoid": "#1A5276", "weibull": "#76D7EA",
+    }
+    _all_features = sorted(df_top1["Feature"].unique())
+
+    def _plot_stacked_models(data_dict, suptitle, out_path, ncols=3):
+        panels = list(data_dict.keys())
+        n = len(panels)
+        ncols = min(ncols, n)
+        nrows = (n + ncols - 1) // ncols
+        fig, axes = plt.subplots(
+            nrows, ncols,
+            figsize=(7 * ncols, 5 * nrows),
+            constrained_layout=True,
+        )
+        if nrows == 1 and ncols == 1:
+            axes = np.array([axes])
+        axes = np.atleast_2d(axes)
+
+        for idx, panel_label in enumerate(panels):
+            r, c = divmod(idx, ncols)
+            ax = axes[r, c]
+            sub = data_dict[panel_label]
+            counts = sub.groupby(["Feature", "Model"]).size().unstack(fill_value=0)
+            for m in _ALL_MODELS:
+                if m not in counts.columns:
+                    counts[m] = 0
+            counts = counts[_ALL_MODELS]
+            feat_order = [f for f in _all_features if f in counts.index]
+            counts = counts.reindex(feat_order, fill_value=0)
+            row_totals = counts.sum(axis=1)
+            props = counts.div(row_totals, axis=0).fillna(0)
+
+            bottom = np.zeros(len(feat_order))
+            x = np.arange(len(feat_order))
+            for model in _ALL_MODELS:
+                vals = props[model].values
+                ax.bar(x, vals, bottom=bottom, color=_MODEL_COLORS[model],
+                       width=0.85, edgecolor="none",
+                       label=model if idx == 0 else "")
+                bottom += vals
+            ax.set_title(panel_label, fontsize=11, fontweight="bold")
+            ax.set_xlim(-0.5, len(feat_order) - 0.5)
+            ax.set_ylim(0, 1.05)
+            ax.set_ylabel("Proportion")
+            ax.set_xlabel("Feature")
+            ax.set_xticks(x)
+            ax.set_xticklabels(feat_order, rotation=90, fontsize=6, ha="center")
+
+        for idx in range(n, nrows * ncols):
+            r, c = divmod(idx, ncols)
+            axes[r, c].set_visible(False)
+
+        handles = [plt.Rectangle((0, 0), 1, 1, color=_MODEL_COLORS[m]) for m in _ALL_MODELS]
+        fig.legend(handles, _ALL_MODELS, loc="upper center", ncol=len(_ALL_MODELS),
+                   fontsize=7, frameon=True, title="Model",
+                   bbox_to_anchor=(0.5, 1.0))
+        fig.suptitle(suptitle, fontsize=14, fontweight="bold", y=1.04)
+
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        fig.savefig(out_path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  Saved {out_path}")
+
+    # Per treatment
+    _treatments = sorted(df_top1["Treatment"].unique())
+    _treat_dict = {t: df_top1[df_top1["Treatment"] == t] for t in _treatments}
+    _plot_stacked_models(
+        _treat_dict,
+        "Best Fitting Model Proportions by Feature – Per Treatment",
+        "fitting/best_model_by_treatment.png",
+    )
+
+    # Per dose within each treatment
+    for _t in _treatments:
+        _t_df = df_top1[df_top1["Treatment"] == _t]
+        _doses = sorted(_t_df["DoseLabel"].unique())
+        _dose_dict = {dl: _t_df[_t_df["DoseLabel"] == dl] for dl in _doses}
+        _plot_stacked_models(
+            _dose_dict,
+            f"Best Fitting Model Proportions by Feature – {_t} (by Dose)",
+            f"fitting/best_model_by_dose_{_t}.png",
+            ncols=min(3, len(_doses)),
+        )
+else:
+    print(f"  Dose CSV not found ({_dose_csv_path}), skipping stacked model plots")

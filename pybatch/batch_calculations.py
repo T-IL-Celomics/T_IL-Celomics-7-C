@@ -673,6 +673,8 @@ class Batch_Experiment(object):
                     if isinstance(cell_df, pd.Series):
                         cell_df = cell_df.to_frame().T
                     cell_df.set_index("TimeIndex", inplace=True)
+                    # Drop duplicate TimeIndex entries (keep first) so reindex won't fail
+                    cell_df = cell_df[~cell_df.index.duplicated(keep='first')]
                     if len(cell_df) > 6:
                         temp_dict = {}
                         cell_df = cell_df.reindex(range(cell_df.index[0], cell_df.index[-1] + 1))  # fills with NaN

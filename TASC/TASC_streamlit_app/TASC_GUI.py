@@ -513,6 +513,17 @@ def run_analysis(
     dataSpecGraphGroups = dataSpecGraphN.copy()
     dataSpecGraphGroups['Groups'] = kmeans_pca['Groups'].copy()
 
+    # ── Export raw clustering data (all original features + PC1/PC2 + Cluster + Treatment) ──
+    clustering_export = dataSpecGraphN.copy()
+    clustering_export['PC1'] = kmeans_pca['PC1'].values
+    clustering_export['PC2'] = kmeans_pca['PC2'].values
+    clustering_export['Cluster'] = kmeans_pca['Groups'].values
+    if 'Treatments' in pca_df.columns:
+        clustering_export['Treatment'] = pca_df['Treatments'].values
+    clustering_export_path = path + title + ' Clustering Raw Data.csv'
+    clustering_export.to_csv(clustering_export_path)
+    st.success(f"Clustering raw data saved to: {clustering_export_path}")
+
     st.markdown(f"$$\\color{{blue}}{{\\Large Figure\\ {FigureNumber}}}$$")
     f.write(markdown.markdown(f"Figure {FigureNumber}"))
     st.markdown("$$\\color{blue}{\\Large Descriptive\\ Table}$$")

@@ -207,7 +207,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--input_csv",
                     default=os.environ.get("PIPELINE_MERGED_CSV",
-                                           "cell_data/MergedAndFilteredExperiment008.csv"))
+                                           "cell_data/raw_all_cells.csv"))
     ap.add_argument("--model_dict",
                     default=os.environ.get("PIPELINE_CHRONOS_MODEL_DICT",
                                            "forecasting/best_t5_model_per_feature.json"))

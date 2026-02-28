@@ -145,25 +145,31 @@ class Cell_Info(object):
         except Exception:
             self.MSD_Linearity_R2_Score = np.nan
         try:
-            (D,), pcov = curve_fit(msd_brownian_motion_func, tau_values, msd_values)
-            self.MSD_Brownian_D = D
+            (D,), pcov = curve_fit(msd_brownian_motion_func, tau_values, msd_values, maxfev=5000)
+            self.MSD_Brownian_D = D if _is_valid_number(D) else 0
             self.MSD_Brownian_Motion_BIC_Score = self._calculate_BIC(tau_values, msd_values, msd_brownian_motion_func, [D])
+            if not _is_valid_number(self.MSD_Brownian_Motion_BIC_Score):
+                self.MSD_Brownian_Motion_BIC_Score = 0
         except:
             self.MSD_Brownian_D = 0
             self.MSD_Brownian_Motion_BIC_Score = 0
         try:
-            (D, v), pcov = curve_fit(msd_directed_motion_func, tau_values, msd_values, bounds=[(0, 1), (np.inf, np.inf)])
-            self.MSD_Directed_D = D
-            self.MSD_Directed_v2 = v**2
+            (D, v), pcov = curve_fit(msd_directed_motion_func, tau_values, msd_values, bounds=[(0, 1), (np.inf, np.inf)], maxfev=5000)
+            self.MSD_Directed_D = D if _is_valid_number(D) else 0
+            self.MSD_Directed_v2 = v**2 if _is_valid_number(v) else 0
+            if not _is_valid_number(self.MSD_Directed_v2):
+                self.MSD_Directed_v2 = 0
             self.MSD_Directed_Motion_BIC_Score = self._calculate_BIC(tau_values, msd_values, msd_directed_motion_func, [D, v])
+            if not _is_valid_number(self.MSD_Directed_Motion_BIC_Score):
+                self.MSD_Directed_Motion_BIC_Score = 0
         except:
             self.MSD_Directed_D = 0
             self.MSD_Directed_v2 = 0
             self.MSD_Directed_Motion_BIC_Score = 0
         try:
-            (D, exp), pcov = curve_fit(msd_exponent_func, tau_values, msd_values, bounds=[(0, 0), (np.inf, np.inf)])
-            self.MSD_Constant_D = D
-            self.MSD_Exponent = exp
+            (D, exp), pcov = curve_fit(msd_exponent_func, tau_values, msd_values, bounds=[(0, 0), (np.inf, np.inf)], maxfev=5000)
+            self.MSD_Constant_D = D if _is_valid_number(D) else 0
+            self.MSD_Exponent = exp if _is_valid_number(exp) else 0
         except:
             self.MSD_Constant_D = 0
             self.MSD_Exponent = 0
@@ -260,7 +266,8 @@ class Cell_Info(object):
         for i in range(self.dimensions):
             if not _is_valid_number(first_info.positions[i]) or not _is_valid_number(second_info.positions[i]):
                 return np.nan
-        return sum([(first_info.positions[i] - second_info.positions[i]) ** 2 for i in range(self.dimensions)]) ** 0.5
+        result = sum([(first_info.positions[i] - second_info.positions[i]) ** 2 for i in range(self.dimensions)]) ** 0.5
+        return result if _is_valid_number(result) else np.nan
 
     def get_parent_info(self):
         """
@@ -298,26 +305,37 @@ class Cell_Info(object):
         #Displacement was calculated differently in matlab, it would've looked like this:
         #self.Displacement = sqrt(x_PosFinal.^2 + y_PosFinal.^2 + z_PosFinal.^2) - sqrt(x_PosInitial.^2 + y_PosInitial.^2 + z_PosInitial.^2) #not python, obviously
         self.Overall_Displacement = self._calculate_distance(self.info_per_id[-1], self.info_per_id[0]) #Net Displacement
+        if not _is_valid_number(self.Overall_Displacement):
+            self.Overall_Displacement = np.nan
         displacements = [id_info.Displacement_From_Last_Id for id_info in self.info_per_id if "Displacement_From_Last_Id" in id_info.keys()]
-        # Filter out NaN displacements before summing
+        # Filter out NaN/Inf displacements before summing
         displacements = [d for d in displacements if _is_valid_number(d)]
-        self.Total_Track_Displacement = sum(displacements) if displacements else 0
+        self.Total_Track_Displacement = sum(displacements) if displacements else np.nan
+        # Guard against Inf sum of displacements
+        if not _is_valid_number(self.Total_Track_Displacement):
+            self.Total_Track_Displacement = np.nan
         #self.Confinement_Ratio_OLD = self.Displacement / self.Track_Displacement_Length
-        if self.Total_Track_Displacement == 0 or not _is_valid_number(self.Overall_Displacement):
+        if not _is_valid_number(self.Total_Track_Displacement) or self.Total_Track_Displacement == 0 or not _is_valid_number(self.Overall_Displacement):
             self.Confinement_Ratio = np.nan
         else:
             self.Confinement_Ratio = self.Overall_Displacement / self.Total_Track_Displacement
+            if not _is_valid_number(self.Confinement_Ratio):
+                self.Confinement_Ratio = np.nan
         self.Mean_Curvilinear_Speed = self._get_average_value("Instantaneous_Speed")
         time_span = (self.info_per_id[-1].TimeIndex - self.info_per_id[0].TimeIndex) * self.dt
         if time_span == 0 or not _is_valid_number(time_span):
             self.Mean_Straight_Line_Speed = np.nan
         else:
             self.Mean_Straight_Line_Speed = self.Overall_Displacement / time_span
+            if not _is_valid_number(self.Mean_Straight_Line_Speed):
+                self.Mean_Straight_Line_Speed = np.nan
         try:
             if self.Mean_Curvilinear_Speed is None or self.Mean_Curvilinear_Speed == 0 or not _is_valid_number(self.Mean_Curvilinear_Speed):
                 self.Linearity_of_Forward_Progression = np.nan
             else:
                 self.Linearity_of_Forward_Progression = self.Mean_Straight_Line_Speed / self.Mean_Curvilinear_Speed
+                if not _is_valid_number(self.Linearity_of_Forward_Progression):
+                    self.Linearity_of_Forward_Progression = np.nan
         except (TypeError, ZeroDivisionError):
             self.Linearity_of_Forward_Progression = np.nan
         self._make_MSD_calculations()
@@ -433,23 +451,38 @@ class Id_Info(Cell_Info):
             try: #This will only work if the previous id had ALL the necessary info. It does not work with partial info or skip info-less ids.
                 vel = "Velocity_"+zir
                 velocity = (self.__getattribute__(pos) - self.last_id_info.__getattribute__(pos)) / time_delta
+                if not _is_valid_number(velocity):
+                    continue
                 self.__setattr__(vel, velocity)
                 self.velocities.append(velocity)
         #Acceleration
-                accel = "Acceleration_"+zir                                
-                self.__setattr__(accel, (self.__getattribute__(vel) - self.last_id_info.__getattribute__(vel)) / time_delta)
+                accel = "Acceleration_"+zir
+                accel_val = (self.__getattribute__(vel) - self.last_id_info.__getattribute__(vel)) / time_delta
+                if _is_valid_number(accel_val):
+                    self.__setattr__(accel, accel_val)
             except AttributeError: #no velocity or position info on previous cell. 
                 pass
         try:
             self.Instantaneous_Speed = sum([vel ** 2 for vel in self.velocities]) ** 0.5 # USED TO BE CALLED VELOCITY
-            self.Acceleration = (self.Instantaneous_Speed - self.last_id_info.Instantaneous_Speed) / time_delta 
+            if not _is_valid_number(self.Instantaneous_Speed):
+                del self.Instantaneous_Speed
+                return
+            self.Acceleration = (self.Instantaneous_Speed - self.last_id_info.Instantaneous_Speed) / time_delta
+            if not _is_valid_number(self.Acceleration):
+                del self.Acceleration
             self.Acceleration_OLD = sum([self.__getattribute__("Acceleration_" + zir) ** 2 for zir in self.zirim]) ** 0.5
+            if not _is_valid_number(self.Acceleration_OLD):
+                del self.Acceleration_OLD
         except AttributeError: #missing info regarding velocity or acceleration.
             pass
         if self.last_id_info.last_id_info and self.last_id_info.skip <= self.skip_limit:
-            self.Instantaneous_Speed_OLD = sum([(self.positions[i] - self.last_id_info.last_id_info.positions[i]) ** 2 for i in range(self.dimensions)]) ** 0.5
+            speed_old = sum([(self.positions[i] - self.last_id_info.last_id_info.positions[i]) ** 2 for i in range(self.dimensions)]) ** 0.5
+            if _is_valid_number(speed_old):
+                self.Instantaneous_Speed_OLD = speed_old
 
     def _get_inst_angle(self):
+        if not self.has_valid_positions or (hasattr(self.last_id_info, 'has_valid_positions') and not self.last_id_info.has_valid_positions):
+            return
         if self.dimensions == 2:
             self.Instantaneous_Angle = math.atan2(self.y_Pos - self.last_id_info.y_Pos, self.x_Pos - self.last_id_info.x_Pos)
         elif self.dimensions == 3:
@@ -491,6 +524,8 @@ class Id_Info(Cell_Info):
         self._get_positions()
         if self.last_id_info:
             self.Displacement_From_Last_Id = self._calculate_distance(self.last_id_info, self)
+            if not _is_valid_number(self.Displacement_From_Last_Id):
+                self.Displacement_From_Last_Id = np.nan
             if not _is_valid_number(self.TimeIndex) or not _is_valid_number(getattr(self.last_id_info, 'TimeIndex', None)):
                 self.skip = self.skip_limit + 1  # treat as too large a skip
             else:
@@ -538,19 +573,24 @@ class Id_Info(Cell_Info):
                 top_part = sum([(self.velocities[i] * id_info.velocities[i]) for i in range(self.dimensions)])
                 bottom_part = (sum([self.velocities[i] ** 2 for i in range(self.dimensions)]) *\
                                sum([id_info.velocities[i] ** 2 for i in range(self.dimensions)])) ** 0.5
+                if bottom_part == 0 or not _is_valid_number(bottom_part):
+                    continue
                 cosang = top_part / bottom_part
+                if not _is_valid_number(cosang):
+                    continue
                 cosang_sum += cosang
                 amount += 1
             except Exception:
                 pass
         try:
             cosang_avg = cosang_sum / amount
+            if not _is_valid_number(cosang_avg):
+                self.__setattr__(attribute, np.nan)
+                return
             self.__setattr__(attribute, cosang_avg)
         except ZeroDivisionError:
             self.__setattr__(attribute, 0)
             return
-        if self.__getattribute__(attribute) == 0:
-            raise Exception("Collectivity came out zero - this shouldn't happen. Call Ori 0507479922")
 
     def return_all(self):
         to_return = self.cell_info.__dict__.copy()
