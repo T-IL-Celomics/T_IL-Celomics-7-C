@@ -726,7 +726,11 @@ class Batch_Experiment(object):
             print("found:", fname in files)
 
             if fname not in files:
-                print("file not found → only NaNs added")
+                print("file not found → filling categories with 'NA'")
+                for i in (1, 2, 3):
+                    c = f"Cha{i}_Category"
+                    if c in well_df.columns:
+                        well_df[c] = well_df[c].fillna("NA")
                 self.well_info[well] = well_df
                 continue
 
@@ -755,6 +759,10 @@ class Batch_Experiment(object):
 
             if missing:
                 print("merge aborted due to missing keys")
+                for i in (1, 2, 3):
+                    c = f"Cha{i}_Category"
+                    if c in well_df.columns:
+                        well_df[c] = well_df[c].fillna("NA")
                 self.well_info[well] = well_df
                 continue
 
@@ -767,6 +775,10 @@ class Batch_Experiment(object):
 
             if not cat_cols:
                 print("no category columns in acc_df → nothing to merge")
+                for i in (1, 2, 3):
+                    c = f"Cha{i}_Category"
+                    if c in well_df.columns:
+                        well_df[c] = well_df[c].fillna("NA")
                 self.well_info[well] = well_df
                 continue
 
@@ -2328,7 +2340,12 @@ class Batch_Experiment(object):
 
         # Drop columns that are entirely NaN, then fill remaining NaN with 0
         avg_df = avg_df.dropna(axis=1, how='all')
+        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
         avg_df = avg_df.fillna(0)
+
+        if avg_df.shape[1] == 0 or avg_df.shape[0] == 0:
+            print("No data for cluster analysis by well -> skipping")
+            return
 
         scaler = StandardScaler(with_std=True)
         avg_df_scaled = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns, index=avg_df.index)
@@ -2444,7 +2461,11 @@ class Batch_Experiment(object):
                     avg_df.loc[well, parameter] = np.average(values)
         # Drop columns that are entirely NaN, then fill remaining NaN with 0
         avg_df = avg_df.dropna(axis=1, how='all')
+        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
         avg_df = avg_df.fillna(0)
+        if avg_df.shape[1] == 0 or avg_df.shape[0] == 0:
+            print("No data for cluster analysis -> skipping")
+            return
         scaler = StandardScaler(with_std=True)
         avg_df = pd.DataFrame(scaler.fit_transform(avg_df), columns=avg_df.columns,
                               index=[self.shortened_well_names[w] for w in avg_df.index])
@@ -2549,17 +2570,11 @@ class Batch_Experiment(object):
                 well_df = self.well_info[well]
                 filtered_df = None
 
-                if len(combo_list) == 1:
-                    filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0])]
-                elif len(combo_list) == 2:
-                    filtered_df = well_df[
-                        (well_df['Cha1_Category'] == combo_list[0]) & (well_df['Cha2_Category'] == combo_list[1])]
-                elif len(combo_list) == 3:
-                    filtered_df = well_df[(well_df['Cha1_Category'] == combo_list[0]) &
-                                          (well_df['Cha2_Category'] == combo_list[1]) &
-                                          (well_df['Cha3_Category'] == combo_list[2])]
-                else:
-                    raise ValueError("wrong number of channels in combo for clustering.")
+                filtered_df = well_df
+                for ci, cat_val in enumerate(combo_list):
+                    col = f"Cha{ci + 1}_Category"
+                    if col in filtered_df.columns:
+                        filtered_df = filtered_df[filtered_df[col] == cat_val]
 
                 if not filtered_df.empty:
                     all_filtered_data.append(filtered_df)
@@ -2607,6 +2622,9 @@ class Batch_Experiment(object):
         avg_df = avg_df.dropna(axis=1, how='all')
         print(f"After dropping all-NaN columns: avg_df shape = {avg_df.shape}")
 
+        # Ensure all columns are numeric (initial DataFrame may have object dtype)
+        avg_df = avg_df.apply(pd.to_numeric, errors='coerce')
+
         # Fill remaining NaN values with 0
         avg_df = avg_df.fillna(0)
 
@@ -2618,6 +2636,10 @@ class Batch_Experiment(object):
             print(f"Found {len(zero_var_cols)} zero-variance columns, removing them")
             avg_df = avg_df.drop(columns=zero_var_cols)
         print(f"After removing zero-variance columns: avg_df shape = {avg_df.shape}")
+
+        if avg_df.shape[1] == 0:
+            print("No numeric columns remaining after cleaning -> skipping clustering page")
+            return
 
         # Scale the data
         print(f"\nScaling data with {avg_df.shape[0]} rows and {avg_df.shape[1]} columns")
@@ -2869,25 +2891,29 @@ class Batch_Experiment(object):
         self.new_page(title)
 
         # Original clustering (by dose combo alone)
-        if not os.path.exists(os.path.join(output_folder, "clustermap.jpg")):
+        clustermap_path = os.path.join(output_folder, "clustermap.jpg")
+        if not os.path.exists(clustermap_path):
             self.draw_cluster_analysis(output_folder=output_folder)
-        self.pdf.image(os.path.join(output_folder, "clustermap.jpg"), x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
+        if os.path.exists(clustermap_path):
+            self.pdf.image(clustermap_path, x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
 
         # New page for treatment + dose clustering
-        self.new_page("Cluster Analysis - by well")
-        if not os.path.exists(os.path.join(output_folder, "clustermap_treatment.jpg")):
+        clustermap_well_path = os.path.join(output_folder, "clustermap_treatment.jpg")
+        if not os.path.exists(clustermap_well_path):
             self.draw_cluster_analysis_by_well(output_folder=output_folder)
-        self.pdf.image(os.path.join(output_folder, "clustermap_treatment.jpg"), x=0, y=30, w=WORKING_WIDTH,
-                       h=WORKING_HEIGHT)
+        if os.path.exists(clustermap_well_path):
+            self.new_page("Cluster Analysis - by well")
+            self.pdf.image(clustermap_well_path, x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
 
         self.add_category_to_well_info()
         # New page for treatment + dose clustering
-        self.new_page("Cluster Analysis - by Treatment + Dose")
-        if not os.path.exists(os.path.join(output_folder, "clustermap_treatment_dose.jpg")):
+        clustermap_td_path = os.path.join(output_folder, "clustermap_treatment_dose.jpg")
+        if not os.path.exists(clustermap_td_path):
             self.draw_cluster_analysis_by_treatment_dose(output_folder=output_folder,
                                                          control_channel=self.control_channel)
-        self.pdf.image(os.path.join(output_folder, "clustermap_treatment_dose.jpg"), x=0, y=30, w=WORKING_WIDTH,
-                       h=WORKING_HEIGHT)
+        if os.path.exists(clustermap_td_path):
+            self.new_page("Cluster Analysis - by Treatment + Dose")
+            self.pdf.image(clustermap_td_path, x=0, y=30, w=WORKING_WIDTH, h=WORKING_HEIGHT)
 
     def load_dicts(self, output_path):
         try:
