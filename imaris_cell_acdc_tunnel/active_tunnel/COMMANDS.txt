@@ -1,0 +1,268 @@
+================================================================================
+  PIPELINE COMMANDS — Cell-ACDC to Imaris-like Excel
+================================================================================
+
+  RECOMMENDED: use the batch files — just double-click or type the name in CMD.
+
+    run_data_prep.bat      Steps 1-2:  rename raw files + build segmentation_input/
+    run_optimization.bat   Step 2b:    Optuna param search  (~40-50 min, once per channel)
+    run_pipeline.bat       Steps 3+5:  ACDC segmentation on all positions + export Excel
+
+  The manual commands below are for reference or to run a single step individually.
+  All commands assume you are in the project root:
+
+    cd "C:\Users\wasee\Desktop\imaris_cellacdc_tunnel - fullTry - Version2 - Copy"
+
+================================================================================
+  WHEN TO USE WHAT
+================================================================================
+
+  NEW EXPERIMENT (first time or new channel):
+    1. run_data_prep.bat        rename files + build folders
+    2. run_optimization.bat     find best segmentation params
+    3. copy best params to INI  (see step 2b output section below)
+    4. run_pipeline.bat         segment + track + export Excel
+
+  REPEAT BATCH (same channel, params already tuned):
+    1. run_data_prep.bat        rename files + build folders
+    2. run_pipeline.bat         segment + track + export Excel
+
+  SINGLE POSITION (manual, one position only):
+    Run the acdc.exe command for that position (see step 3 below),
+    then run the export command for that --select value (see step 5 below).
+
+================================================================================
+  STEP 0 — ONE-TIME: Create Base INI via ACDC GUI
+================================================================================
+
+  Only needed the very first time, or when switching to a new channel.
+  This gives you a visually verified starting point before optimization.
+
+  1. Open Anaconda Prompt
+  2. conda activate acdc
+  3. acdc
+  4. Load:   segmentation_input\Position_2\Images\
+     Channel: NIR
+  5. Segmentation model: thresholding
+       gauss_sigma: 2.0
+       threshold_method: threshold_li
+       segment_3D_volume: False
+     Postprocessing ON:
+       min_solidity: 0.5
+       min_area: 50
+       max_elongation: 3.0
+     Tracker: trackpy  |  do_tracking: ON  |  use_ROI: OFF
+  6. Visually check 3-5 frames — cells should look reasonable
+  7. File -> Save workflow ->  inis\thresholding_acdc_segm_track_workflow.ini
+
+================================================================================
+  STEP 1 — Rename raw lab exports to ACDC naming
+================================================================================
+
+  WHEN:  Once per new raw data export from the microscope.
+  ENV:   imaris_xls
+  BAT:   run_data_prep.bat  (runs this + step 2 together)
+
+  "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+    scripts/rename_to_acdc_input.py Phase3
+
+  Output:
+    ACDC_IN_Phase3\field1\B2_1\NIR\Images\field1_B2_NIR_0.tif ... _47.tif
+    ACDC_IN_Phase3\field1\D2_1\NIR\Images\field1_D2_NIR_0.tif ... _47.tif
+    ACDC_IN_Phase3\field1\E2_1\NIR\Images\field1_E2_NIR_0.tif ... _47.tif
+
+================================================================================
+  STEP 2 — Build segmentation_input/ folder structure
+================================================================================
+
+  WHEN:  Once per batch, after step 1.
+  ENV:   imaris_xls
+  BAT:   run_data_prep.bat  (runs this + step 1 together)
+
+  "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+    scripts/build_segmentation_input.py ^
+    --in_root ACDC_IN_Phase3 ^
+    --out_root segmentation_input
+
+  Output:
+    segmentation_input\position_map.csv
+    segmentation_input\Position_1\Images\field1_B2_NIR.tif
+    segmentation_input\Position_2\Images\field1_D2_NIR.tif
+    segmentation_input\Position_3\Images\field1_E2_NIR.tif
+
+================================================================================
+  STEP 2b — OPTIONAL: Run parameter optimization (Optuna, ~40-50 min)
+================================================================================
+
+  WHEN:  Before step 3, if you want the best gauss_sigma / threshold_method /
+         min_area for your data.  Run once per channel.
+         Skip if you already have a tuned INI from a previous run.
+  ENV:   imaris_xls  (ACDC is spawned automatically as a subprocess in acdc env)
+  BAT:   run_optimization.bat
+
+  "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+    scripts/optimize_acdc_params_optuna.py ^
+    --base-ini "inis/thresholding_acdc_segm_track_workflow.ini" ^
+    --position-dir "segmentation_input/Position_2" ^
+    --gt "results/C-1_MI006-nir_D2_1.xls" ^
+    --pixel-size-um 1.22 ^
+    --acdc-env acdc ^
+    --conda-bat "C:/Users/wasee/anaconda3/envs/acdc/python.exe" ^
+    --phase 1 ^
+    --n-trials 50 ^
+    --objective mean_r2 ^
+    --out-dir optuna_trials/thresholding_phase1
+
+  Output:
+    optuna_trials\thresholding_phase1\optuna_summary.csv   <- all trial scores
+    optuna_trials\thresholding_phase1\best_NIR.ini         <- best params
+
+  After optimization finishes:
+    1. Open best_NIR.ini and note the values of:
+         gauss_sigma, threshold_method, min_area
+    2. Open inis\thresholding_acdc_segm_track_workflow.ini
+    3. Update [segmentation_model_params]:
+         gauss_sigma = <value from best_NIR.ini>
+         threshold_method = <value from best_NIR.ini>
+    4. Update [standard_postprocess_features]:
+         min_area = <value from best_NIR.ini>
+    5. Run run_pipeline.bat (or step 3 manually).
+
+  Expected output per trial:
+    [P1 trial 3] gauss_sigma=1.45  threshold_method=threshold_otsu  min_area=87
+      [acdc] still running... 30s
+      [acdc] done in 52s
+      -> score=0.6123  matched=847
+
+================================================================================
+  STEP 3 — Run ACDC segmentation + tracking
+================================================================================
+
+  WHEN:  Every time you have new data (after steps 1-2 and INI is tuned).
+  ENV:   acdc
+  BAT:   run_pipeline.bat  (runs this + step 5 together)
+
+  Uses the per-position INI files in segmentation_input\_cli_runs\.
+  These are pre-built and point to the correct TIF file for each position.
+
+  Position_1 (field1_B2):
+    "C:/Users/wasee/anaconda3/envs/acdc/Scripts/acdc.exe" ^
+      -p "segmentation_input/_cli_runs/field1_B2_1_NIR__Position_1.ini" -y
+
+  Position_2 (field1_D2):
+    "C:/Users/wasee/anaconda3/envs/acdc/Scripts/acdc.exe" ^
+      -p "segmentation_input/_cli_runs/field1_D2_1_NIR__Position_2.ini" -y
+
+  Position_3 (field1_E2):
+    "C:/Users/wasee/anaconda3/envs/acdc/Scripts/acdc.exe" ^
+      -p "segmentation_input/_cli_runs/field1_E2_1_NIR__Position_3.ini" -y
+
+  Output (written into each Position_N\Images\ folder):
+    *_segm.npz          segmentation masks — one label array per frame
+    *_acdc_output.csv   per-cell per-frame measurements table
+
+  NOTE: -y means "yes to all prompts" (non-interactive / headless mode).
+
+================================================================================
+  STEP 4 — OPTIONAL: Filter short/spurious tracks
+================================================================================
+
+  WHEN:  Only if you want to remove cells that appear in fewer than N frames.
+         Cells that vanish early (noise, out-of-focus) are common culprits.
+         Skip if you want all detected cells in the Excel output.
+  ENV:   imaris_xls
+
+  "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+    scripts/filter_acdc_output_by_tracklen.py ^
+    --exp_root segmentation_input ^
+    --select field1_D2_1_NIR ^
+    --min_frames 15
+
+  Repeat --select for each position:
+    field1_B2_1_NIR
+    field1_D2_1_NIR
+    field1_E2_1_NIR
+
+  Creates backup: *_acdc_output.original.csv
+  Overwrites:     *_acdc_output.csv (filtered version)
+
+  To undo filtering: rename *.original.csv back to *_acdc_output.csv
+
+================================================================================
+  STEP 5 — Export Imaris-like Excel
+================================================================================
+
+  WHEN:  After step 3 (and optionally step 4). Converts segm.npz -> Excel.
+  ENV:   imaris_xls
+  BAT:   run_pipeline.bat  (runs this + step 3 together)
+
+  Position_1 (field1_B2):
+    "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+      scripts/export_imaris_like_from_pipeline.py ^
+      --exp_root segmentation_input ^
+      --out_dir pipeline_output ^
+      --select field1_B2_1_NIR ^
+      --pixel-size-um 1.22 ^
+      --z-step-um 1.0 ^
+      --frame-interval-s 3600
+
+  Position_2 (field1_D2):
+    "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+      scripts/export_imaris_like_from_pipeline.py ^
+      --exp_root segmentation_input ^
+      --out_dir pipeline_output ^
+      --select field1_D2_1_NIR ^
+      --pixel-size-um 1.22 ^
+      --z-step-um 1.0 ^
+      --frame-interval-s 3600
+
+  Position_3 (field1_E2):
+    "C:/Users/wasee/anaconda3/envs/imaris_xls/python.exe" ^
+      scripts/export_imaris_like_from_pipeline.py ^
+      --exp_root segmentation_input ^
+      --out_dir pipeline_output ^
+      --select field1_E2_1_NIR ^
+      --pixel-size-um 1.22 ^
+      --z-step-um 1.0 ^
+      --frame-interval-s 3600
+
+  Output:
+    pipeline_output\field1_B2_1_NIR__Position_1_imaris_like.xlsx
+    pipeline_output\field1_D2_1_NIR__Position_2_imaris_like.xlsx
+    pipeline_output\field1_E2_1_NIR__Position_3_imaris_like.xlsx
+
+================================================================================
+  QUICK REFERENCE
+================================================================================
+
+  Env          Used for
+  ---------    ---------------------------------------------------------------
+  acdc         Step 0 (GUI), Step 3 (ACDC segmentation + tracking)
+  imaris_xls   Steps 1, 2, 2b, 4, 5  (all other Python scripts)
+
+  Ground truth files (for optimization and validation):
+    results\C-1_MI006-nir_D2_1.xls    Position_2 / D2  (primary reference)
+    results\C-1_MI006-nir_E2_1.xls    Position_3 / E2
+
+  ACDC logs (if ACDC fails, check here):
+    C:\Users\wasee\acdc-appdata\.acdc-logs\
+
+================================================================================
+  EXPECTED RESULTS
+================================================================================
+
+  After optimization (step 2b):
+    Best trial score in optuna_summary.csv should be > 0.5 (ideally > 0.7).
+    If all scores are -1.0: ACDC is failing silently — check acdc-logs.
+    If all scores are 0.0: cells are being found but no metrics match —
+      check that the ground truth file path and --select are correct.
+
+  After full pipeline (step 5):
+    Open pipeline_output\*.xlsx and compare to results\*.xls.
+    Target R2 values:
+      Position X / Y  >  0.95
+      Area            >  0.70
+      Sphericity      >  0.60
+      Ellipsoid axes  >  0.50
+
+================================================================================
