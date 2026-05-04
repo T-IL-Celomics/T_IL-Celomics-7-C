@@ -1,0 +1,172 @@
+stdlib ok
+numpy ok
+pandas ok
+tifffile ok
+skimage ok
+entering main
+args parsed: px=1.22
+Loading data...
+  segm=(48, 1584, 1176)  img=(48, 1584, 1176)  GT_sheets=61
+Frame 0 (GT Time=1):  pipeline=936 cells
+  GT cells for Time=1: 339
+  Offsets: ox=-4.880 um  oy=-10.980 um
+Matched 49 cell pairs (max_dist=5.0 um)
+Computing cell features...
+  done: 49 cells
+
+======================================================================
+  AREA (um²)   (n=49)
+======================================================================
+  [1] R²=0.1303  MAE=1551.9671  slope=3.0243  intercept=1072.6216  n_px * px^2 * z <-- BEST
+  [2] R²=0.1303  MAE=1178.9870  slope=1.1744  intercept=1072.6216  pi * (n_px*px^2/pi)
+  [3] R²=0.1303  MAE=1014.4026  slope=0.9224  intercept=1072.6216  4 * n_px * px^2
+  [4] R²=0.1303  MAE=1400.5695  slope=1.8448  intercept=1072.6216  2 * n_px * px^2
+  [5] R²=0.1303  MAE=1594.6690  slope=3.6896  intercept=1072.6216  n_px * px^2
+
+======================================================================
+  NUMBER OF VOXELS   (n=49)
+======================================================================
+  [1] R²=0.1295  MAE=394.5510  slope=1.6945  intercept=303.9871  n_px <-- BEST
+  [2] R²=0.1295  MAE=394.5510  slope=1.6945  intercept=303.9871  regionprops.area
+
+======================================================================
+  VOLUME (um³)   (n=49)
+======================================================================
+  [1] R²=0.1349  MAE=1575.6352  slope=3.3545  intercept=1018.0937  n_px*px³ <-- BEST
+  [2] R²=0.1349  MAE=1575.6352  slope=3.3545  intercept=1018.0937  n_px*px²*z
+  [3] R²=0.1349  MAE=1812.1998  slope=3354.4690  intercept=1018.0937  n_px*px²*z/1000
+  [4] R²=0.1349  MAE=1618.3371  slope=4.0925  intercept=1018.0937  n_px*px²
+
+======================================================================
+  SPHERICITY   (n=49)
+======================================================================
+  [1] R²=0.1055  MAE=0.0571  slope=0.3386  intercept=0.2608  Wadell(padded) <-- BEST
+  [2] R²=0.0788  MAE=0.0898  slope=0.2128  intercept=0.3089  Wadell(slab)
+  [3] R²=0.0179  MAE=0.4912  slope=0.0712  intercept=0.3512  Circularity_px
+  [4] R²=0.0179  MAE=0.4912  slope=0.0712  intercept=0.3512  Circularity_um
+
+======================================================================
+  Ellipsoid Axis Length A  (GT constant=0.6100 um)
+  Formula: 0.5 * z_step_um  (0.6100 um) -- constant for 2D
+======================================================================
+
+======================================================================
+  Ellipsoid Axis Length B   (n=49)
+======================================================================
+  [1] R²=0.1216  MAE=4.9710  slope=0.3549  intercept=10.5633  λ_bias_ax1 <-- BEST
+  [2] R²=0.1216  MAE=9.2415  slope=0.1775  intercept=10.5633  2λ_bias_ax1
+  [3] R²=0.1211  MAE=4.9304  slope=0.3540  intercept=10.5428  λ_unbias_ax1
+  [4] R²=0.1211  MAE=9.3638  slope=0.1770  intercept=10.5428  2λ_unbias_ax1
+  [5] R²=0.1066  MAE=3.8149  slope=0.6106  intercept=6.5291  regionprops.minor*px
+
+======================================================================
+  Ellipsoid Axis Length C   (n=49)
+======================================================================
+  [1] R²=0.0348  MAE=6.1723  slope=0.2064  intercept=19.6487  regionprops.major*px <-- BEST
+  [2] R²=0.0348  MAE=14.0781  slope=0.4128  intercept=19.6487  regionprops.major*px/2
+  [3] R²=0.0348  MAE=14.0781  slope=0.4128  intercept=19.6487  2√λ_bias_ax0
+  [4] R²=0.0348  MAE=18.8215  slope=0.8256  intercept=19.6487  √λ_bias_ax0
+  [5] R²=0.0348  MAE=12.9584  slope=0.3692  intercept=19.6487  √(5λ)_bias_ax0
+
+======================================================================
+  ELLIPTICITY OBLATE   (n=49)
+======================================================================
+  [1] R²=0.0050  MAE=0.3008  slope=0.0846  intercept=0.5244  1-sqrt(lb/la)_eig_unbias <-- BEST
+  [2] R²=0.0050  MAE=0.3008  slope=0.0846  intercept=0.5244  1-sqrt(lb/la)_eig_bias
+  [3] R²=0.0041  MAE=0.2335  slope=0.0544  intercept=0.5232  1-lb/la_eig_unbias
+  [4] R²=0.0041  MAE=0.2335  slope=0.0544  intercept=0.5232  1-lb/la_eig_bias
+  [5] R²=0.0024  MAE=0.2499  slope=0.0374  intercept=0.5236  1-(lb/la)^2_eig_unbias
+
+======================================================================
+  ELLIPTICITY PROLATE   (n=49)
+======================================================================
+  [1] R²=0.0950  MAE=0.1336  slope=0.0283  intercept=0.0003  z_half/sqrt(la)_eig_bias <-- BEST
+  [2] R²=0.0949  MAE=0.1330  slope=0.0286  intercept=0.0003  z_half/sqrt(la)_eig_unbias
+  [3] R²=0.0862  MAE=0.0158  slope=0.0968  intercept=0.0023  (z_half/sqrt(la))^2_eig_unbias
+  [4] R²=0.0862  MAE=0.0160  slope=0.0951  intercept=0.0023  (z_half/sqrt(la))^2_eig_bias
+  [5] R²=0.0147  MAE=0.2840  slope=-0.0026  intercept=0.0050  1-sqrt(lb/la)_eig_unbias
+
+======================================================================
+  POSITION X (um)   (n=49)
+======================================================================
+  [1] R²=1.0000  MAE=2.2097  slope=0.9996  intercept=-0.1955  X:geom_centroid  ox=-3.97 <-- BEST
+  [2] R²=1.0000  MAE=2.2097  slope=0.9996  intercept=-0.1955  X:geom_centroid  ox=-3.97
+  [3] R²=1.0000  MAE=2.2097  slope=0.9996  intercept=-0.1955  X:geom_centroid  ox=-3.97
+  [4] R²=1.0000  MAE=2.2097  slope=0.9996  intercept=-0.1955  X:geom_centroid  ox=-3.97
+  [5] R²=1.0000  MAE=2.2097  slope=0.9996  intercept=-0.1955  X:geom_centroid  ox=-3.97
+
+======================================================================
+  POSITION Y (um)   (n=49)
+======================================================================
+  [1] R²=1.0000  MAE=2.2935  slope=0.9995  intercept=-0.1947  Y:geom_centroid  oy=-10.37 <-- BEST
+  [2] R²=1.0000  MAE=2.2935  slope=0.9995  intercept=-0.1947  Y:geom_centroid  oy=-10.37
+  [3] R²=1.0000  MAE=2.2935  slope=0.9995  intercept=-0.1947  Y:geom_centroid  oy=-10.37
+  [4] R²=1.0000  MAE=2.2935  slope=0.9995  intercept=-0.1947  Y:geom_centroid  oy=-10.37
+  [5] R²=1.0000  MAE=2.2935  slope=0.9995  intercept=-0.1947  Y:geom_centroid  oy=-10.37
+
+======================================================================
+  Intensity Mean Ch=1   (n=49)
+======================================================================
+  [1] R²=0.6896  MAE=100.5354  slope=0.6006  intercept=161.6334  median <-- BEST
+  [2] R²=0.6665  MAE=100.3509  slope=0.6028  intercept=160.6891  mean
+  [3] R²=0.6665  MAE=100.3509  slope=0.6028  intercept=160.6891  sum/n
+  [4] R²=0.6170  MAE=240.3584  slope=1.4610  intercept=173.6614  min
+  [5] R²=0.5416  MAE=252.8294  slope=0.3233  intercept=189.5657  max
+
+======================================================================
+  Intensity Max Ch=1   (n=49)
+======================================================================
+  [1] R²=0.6186  MAE=536.8355  slope=1.5515  intercept=331.5634  mean <-- BEST
+  [2] R²=0.6186  MAE=536.8355  slope=1.5515  intercept=331.5634  sum/n
+  [3] R²=0.6171  MAE=537.0408  slope=1.5178  intercept=344.4314  median
+  [4] R²=0.5594  MAE=304.3878  slope=0.8778  intercept=378.2585  max
+  [5] R²=0.5523  MAE=764.3265  slope=3.6925  intercept=374.7349  min
+
+======================================================================
+  Intensity Median Ch=1   (n=49)
+======================================================================
+  [1] R²=0.7035  MAE=91.9592  slope=0.5532  intercept=137.2079  median <-- BEST
+  [2] R²=0.6734  MAE=94.8486  slope=0.5526  intercept=137.3277  mean
+  [3] R²=0.6734  MAE=94.8486  slope=0.5526  intercept=137.3277  sum/n
+  [4] R²=0.6070  MAE=198.3061  slope=1.3216  intercept=151.7749  min
+  [5] R²=0.5381  MAE=280.7755  slope=0.2939  intercept=165.2884  max
+
+======================================================================
+  Intensity Min Ch=1   (n=49)
+======================================================================
+  [1] R²=0.5060  MAE=46.7347  slope=0.3866  intercept=64.8413  min <-- BEST
+  [2] R²=0.4060  MAE=251.2041  slope=0.1346  intercept=70.6906  median
+  [3] R²=0.3878  MAE=251.4094  slope=0.1344  intercept=70.7722  mean
+  [4] R²=0.3878  MAE=251.4094  slope=0.1344  intercept=70.7722  sum/n
+  [5] R²=0.2686  MAE=483.8571  slope=0.0665  intercept=80.5540  max
+
+======================================================================
+  Intensity Sum Ch=1   (n=49)
+======================================================================
+  [1] R²=0.7115  MAE=224387.8571  slope=652.2407  intercept=-17860.3930  median <-- BEST
+  [2] R²=0.6730  MAE=224387.6519  slope=647.6586  intercept=-16288.8824  mean
+  [3] R²=0.6730  MAE=224387.6519  slope=647.6586  intercept=-16288.8824  sum/n
+  [4] R²=0.5733  MAE=224615.1429  slope=1505.6766  intercept=6897.6511  min
+  [5] R²=0.5409  MAE=224155.2041  slope=345.4549  intercept=15886.5147  max
+
+======================================================================
+  Intensity StdDev Ch=1   (n=49)
+======================================================================
+  [1] R²=0.5586  MAE=196.6167  slope=0.2792  intercept=76.3411  median <-- BEST
+  [2] R²=0.5534  MAE=195.4081  slope=0.2837  intercept=74.5979  mean
+  [3] R²=0.5534  MAE=195.4081  slope=0.2837  intercept=74.5979  sum/n
+  [4] R²=0.4956  MAE=424.6673  slope=0.1598  intercept=83.6100  max
+  [5] R²=0.4722  MAE=65.3531  slope=0.6601  intercept=84.6831  min
+
+======================================================================
+  Intensity Center Ch=1   (n=49)
+======================================================================
+  [1] R²=0.4535  MAE=207.5510  slope=0.8947  intercept=192.9782  median <-- BEST
+  [2] R²=0.4285  MAE=381.1020  slope=2.2366  intercept=202.1801  min
+  [3] R²=0.4201  MAE=214.6283  slope=0.8792  intercept=198.5783  mean
+  [4] R²=0.4201  MAE=214.6283  slope=0.8792  intercept=198.5783  sum/n
+  [5] R²=0.3109  MAE=248.2857  slope=0.4898  intercept=258.7367  pixel_at_CIM
+
+======================================================================
+  SEARCH COMPLETE
+======================================================================
